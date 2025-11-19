@@ -1,0 +1,12 @@
+[package]
+name = "librsados"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+homepage = "https://github.com/datdenkikniet/librsados"
+repository = "https://github.com/datdenkikniet/librsados"
+description = "Idiomatic (async) rust bindings for librados"
+
+
+[dependencies]
+futures = { version = "0.3.31", default-features = false, features = ["alloc"] }
