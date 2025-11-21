@@ -2,10 +2,13 @@
 name = "librsados"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 license-file = "LICENSE"
 homepage = "https://github.com/datdenkikniet/librsados"
 repository = "https://github.com/datdenkikniet/librsados"
 description = "Idiomatic (async) rust bindings for librados"
+keywords = [ "rados", "ceph", "librados", "async" ]
+categories = [ "api-bindings", "asynchronous", "filesystem" ]
 
 
 [dependencies]
