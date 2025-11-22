@@ -40,27 +40,27 @@ impl RadosConfig {
         }
     }
 
-    pub fn with_id(&mut self, id: Option<&str>) -> &mut Self {
+    pub fn set_id<'a>(&'a mut self, id: Option<&str>) -> &'a mut Self {
         self.id = id.map(|v| CString::new(v).expect("User contained NUL byte"));
         self
     }
 
-    pub fn with_files(mut self, files: Vec<FileConfig>) -> Self {
+    pub fn set_files(&mut self, files: Vec<FileConfig>) -> &mut Self {
         self.files = files;
         self
     }
 
-    pub fn with_argv(mut self, argv: Vec<String>) -> Self {
+    pub fn set_argv(&mut self, argv: Vec<String>) -> &mut Self {
         self.argv = argv;
         self
     }
 
-    pub fn with_env(mut self, env: Vec<String>) -> Self {
+    pub fn set_env(&mut self, env: Vec<String>) -> &mut Self {
         self.env = env;
         self
     }
 
-    pub fn with_rados_quiet(mut self, quiet: bool) -> Self {
+    pub fn set_rados_quiet(&mut self, quiet: bool) -> &mut Self {
         self.rados_quiet = quiet;
         self
     }
