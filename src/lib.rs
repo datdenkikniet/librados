@@ -18,6 +18,9 @@ pub struct IoCtx<'rados> {
     _rados: PhantomData<&'rados Rados>,
 }
 
+unsafe impl Send for IoCtx<'_> {}
+unsafe impl Sync for IoCtx<'_> {}
+
 impl<'rados> IoCtx<'rados> {
     pub fn new(rados: &'rados Rados, pool: &str) -> Option<Self> {
         let mut inner = std::ptr::null_mut();
@@ -40,12 +43,14 @@ impl Drop for IoCtx<'_> {
     }
 }
 
-pub struct XattrIterator<'a> {
+pub struct ExtendedAttributes<'a> {
     _io: &'a IoCtx<'a>,
     inner: rados_xattrs_iter_t,
 }
 
-impl<'a> XattrIterator<'a> {
+unsafe impl Send for ExtendedAttributes<'_> {}
+
+impl<'a> ExtendedAttributes<'a> {
     /// # Safety
     /// `inner` must be a valid, non-null [`rados_xattrs_iter_t`].
     pub(crate) unsafe fn new(io: &'a IoCtx<'a>, inner: rados_xattrs_iter_t) -> Self {
@@ -72,7 +77,7 @@ impl<'a> XattrIterator<'a> {
     }
 }
 
-impl Iterator for XattrIterator<'_> {
+impl Iterator for ExtendedAttributes<'_> {
     type Item = (String, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -80,7 +85,7 @@ impl Iterator for XattrIterator<'_> {
     }
 }
 
-impl Drop for XattrIterator<'_> {
+impl Drop for ExtendedAttributes<'_> {
     fn drop(&mut self) {
         unsafe { rados_getxattrs_end(self.inner) }
     }

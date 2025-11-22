@@ -16,6 +16,8 @@ pub struct RadosCompletion {
     state: Poll<Result<usize, i32>>,
 }
 
+unsafe impl Send for RadosCompletion {}
+
 impl RadosCompletion {
     /// Create a new [`RadosCompletion`].
     ///

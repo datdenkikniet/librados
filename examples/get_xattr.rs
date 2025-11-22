@@ -10,21 +10,21 @@ async fn main() {
 
     let config = RadosConfig::default();
     let rados = Rados::connect(&config).unwrap();
-    let mut ctx = IoCtx::new(&rados, &pool).unwrap();
+    let mut ctx1 = IoCtx::new(&rados, &pool).unwrap();
+    let mut ctx2 = IoCtx::new(&rados, &pool).unwrap();
 
     println!("Getting xattr {xattr} on object {object}");
 
     let mut xattr_buf = [0u8; 128];
-    let xattr_len = ctx
-        .get_xattr(&object, &xattr, &mut xattr_buf)
-        .await
-        .unwrap();
 
-    println!("Succes: {:02X?}!", &xattr_buf[..xattr_len]);
+    let (xattr_len, xattrs) = tokio::join!(
+        ctx1.get_xattr(&object, &xattr, &mut xattr_buf),
+        ctx2.get_xattrs(&object)
+    );
 
-    let xattrs = ctx.get_xattrs(&object).await.unwrap();
+    println!("Succes: {:02X?}!", &xattr_buf[..xattr_len.unwrap()]);
 
-    for (name, value) in xattrs {
+    for (name, value) in xattrs.unwrap() {
         println!("Name: {}, value: {:02X?}", name, value);
     }
 }

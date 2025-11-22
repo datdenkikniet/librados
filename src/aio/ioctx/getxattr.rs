@@ -20,7 +20,7 @@ impl IoCtx<'_> {
         object: &str,
         name: &str,
         buffer: &'buf mut [u8],
-    ) -> impl Future<Output = Result<usize, GetXAttrError>> + 'io
+    ) -> impl Future<Output = Result<usize, GetXAttrError>> + Send + 'io
     where
         'buf: 'io,
     {

@@ -62,6 +62,8 @@ impl RadosConfig {
 #[derive(Debug)]
 pub struct Rados(pub(crate) rados_t);
 
+unsafe impl Send for Rados {}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectError {
     Create,
