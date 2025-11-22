@@ -1,4 +1,4 @@
-use librsados::{IoCtx, Rados, RadosConfig};
+use librados::{IoCtx, Rados, RadosConfig};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
