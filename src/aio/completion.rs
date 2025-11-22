@@ -12,7 +12,8 @@ use crate::librados::{
 
 #[derive(Debug)]
 pub struct RadosCompletion {
-    inner: RadosCompletionInner,
+    inner: RadosCompletionBase,
+    state: Poll<Result<usize, i32>>,
 }
 
 impl RadosCompletion {
@@ -58,62 +59,26 @@ impl RadosCompletion {
         Some(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
             // as `RadosCompletionInner::new_with`.
-            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, f)? },
+            inner: unsafe { RadosCompletionBase::new_with(resolve_on_safe, f)? },
+            state: Poll::Pending,
         })
     }
 
     pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, i32>> {
-        self.inner.poll(cx)
-    }
-}
-
-#[derive(Debug)]
-enum RadosCompletionInner {
-    Pending(RadosCompletionBase),
-    Completed(usize),
-    Failed(i32),
-}
-
-impl RadosCompletionInner {
-    /// # Safety
-    /// See [`RadosCompletion::new_with`].
-    pub unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
-    where
-        F: FnOnce(rados_completion_t) -> bool,
-    {
-        // SAFETY: `RadosCompletionInner::new_with` has the same safety requirements
-        // as `RadosCompletionBase::new_with`.
-        let completion = unsafe { RadosCompletionBase::new_with(resolve_on_safe, f) };
-
-        if let Some(completion) = completion {
-            Some(Self::Pending(completion))
-        } else {
-            None
-        }
-    }
-
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, i32>> {
-        // Check if we need to update the internal state.
-        match self {
-            RadosCompletionInner::Pending(completion) => match completion.poll(cx) {
+        if self.state.is_pending() {
+            self.state = match self.inner.poll(cx) {
                 Poll::Ready(res) => {
-                    let new_state = match usize::try_from(res) {
-                        Ok(data) => Self::Completed(data),
-                        Err(_) => Self::Failed(res),
-                    };
-
-                    let _ = core::mem::replace(self, new_state);
+                    if let Ok(data) = usize::try_from(res) {
+                        Poll::Ready(Ok(data))
+                    } else {
+                        Poll::Ready(Err(res))
+                    }
                 }
-                Poll::Pending => {}
-            },
-            _ => {}
+                Poll::Pending => Poll::Pending,
+            };
         }
 
-        match self {
-            RadosCompletionInner::Pending(_) => Poll::Pending,
-            RadosCompletionInner::Completed(res) => Poll::Ready(Ok(*res)),
-            RadosCompletionInner::Failed(e) => Poll::Ready(Err((*e).into())),
-        }
+        self.state.clone()
     }
 }
 
