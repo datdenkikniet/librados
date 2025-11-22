@@ -16,7 +16,6 @@ impl<'rados> IoCtx<'rados> {
         object: &'s str,
     ) -> impl Future<Output = Result<ExtendedAttributes<'io, 'rados>, ()>> + Send {
         let object = CString::new(object).expect("Object name had interior NUL.");
-
         GetXAttrs::new(self, object)
     }
 }

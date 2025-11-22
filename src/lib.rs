@@ -57,7 +57,7 @@ impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
         Self { _io: io, inner }
     }
 
-    pub fn try_next(&mut self) -> Result<Option<(String, Vec<u8>)>, i32> {
+    pub fn try_next<'a>(&'a mut self) -> Result<Option<(&'a CStr, &'a [u8])>, i32> {
         let mut name = std::ptr::null();
         let mut val = std::ptr::null();
         let mut val_len = 0;
@@ -69,8 +69,11 @@ impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
         } else if name == std::ptr::null() && val == std::ptr::null() && val_len == 0 {
             Ok(None)
         } else {
-            let name = unsafe { CStr::from_ptr(name) }.to_string_lossy().into();
-            let val = unsafe { core::slice::from_raw_parts(val as *const u8, val_len) }.to_vec();
+            assert!(!name.is_null());
+            assert!(!val.is_null());
+
+            let name = unsafe { CStr::from_ptr(name) };
+            let val = unsafe { core::slice::from_raw_parts(val as *const u8, val_len) };
 
             Ok(Some((name, val)))
         }
@@ -81,7 +84,10 @@ impl Iterator for ExtendedAttributes<'_, '_> {
     type Item = (String, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.try_next().ok().flatten()
+        self.try_next()
+            .ok()
+            .flatten()
+            .map(|(k, v)| (k.to_string_lossy().into(), v.to_vec()))
     }
 }
 

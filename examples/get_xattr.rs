@@ -6,25 +6,25 @@ async fn main() {
 
     let pool = args.nth(1).expect("pool as 1st argument");
     let object = args.next().expect("Object as 2nd argument");
-    let xattr = args.next().expect("xattr name as 3rd argument");
 
     let config = RadosConfig::default();
     let rados = Rados::connect(&config).unwrap();
-    let mut ctx1 = IoCtx::new(&rados, &pool).unwrap();
-    let mut ctx2 = IoCtx::new(&rados, &pool).unwrap();
+    let mut ctx = IoCtx::new(&rados, &pool).unwrap();
 
-    println!("Getting xattr {xattr} on object {object}");
+    println!("Getting xattr iterator");
+    let attrs: Vec<_> = ctx.get_xattrs(&object).await.unwrap().collect();
 
-    let mut xattr_buf = [0u8; 128];
+    for (key, value) in attrs {
+        let mut buffer = vec![0u8; value.len()];
+        let single_attr_len = ctx.get_xattr(&object, &key, &mut buffer).await.unwrap();
 
-    let (xattr_len, xattrs) = tokio::join!(
-        ctx1.get_xattr(&object, &xattr, &mut xattr_buf),
-        ctx2.get_xattrs(&object),
-    );
+        let single = &buffer[..single_attr_len];
 
-    println!("Succes: {:02X?}!", &xattr_buf[..xattr_len.unwrap()]);
+        assert_eq!(&value, single);
 
-    for (name, value) in xattrs.unwrap() {
-        println!("Name: {}, value: {:02X?}", name, value);
+        println!(
+            "Found extended attribute `{key}` containing {} bytes",
+            value.len()
+        );
     }
 }
