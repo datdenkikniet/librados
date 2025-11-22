@@ -1,1 +1,2 @@
 mod getxattr;
+mod getxattrs;

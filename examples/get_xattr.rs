@@ -21,4 +21,10 @@ async fn main() {
         .unwrap();
 
     println!("Succes: {:02X?}!", &xattr_buf[..xattr_len]);
+
+    let xattrs = ctx.get_xattrs(&object).await.unwrap();
+
+    for (name, value) in xattrs {
+        println!("Name: {}, value: {:02X?}", name, value);
+    }
 }
