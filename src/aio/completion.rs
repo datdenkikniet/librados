@@ -12,7 +12,7 @@ use crate::librados::{
 
 #[derive(Debug)]
 pub struct RadosCompletion {
-    inner: RadosCompletionBase,
+    inner: RadosCompletionInner,
     state: Poll<Result<usize, i32>>,
 }
 
@@ -59,7 +59,7 @@ impl RadosCompletion {
         Some(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
             // as `RadosCompletionInner::new_with`.
-            inner: unsafe { RadosCompletionBase::new_with(resolve_on_safe, f)? },
+            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, f)? },
             state: Poll::Pending,
         })
     }
@@ -83,13 +83,13 @@ impl RadosCompletion {
 }
 
 #[derive(Debug)]
-struct RadosCompletionBase {
+struct RadosCompletionInner {
     safe: bool,
     completion: rados_completion_t,
     rx: futures::channel::oneshot::Receiver<()>,
 }
 
-impl RadosCompletionBase {
+impl RadosCompletionInner {
     /// # Safety
     /// See [`RadosCompletion::new_with`].
     unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
@@ -166,7 +166,7 @@ impl RadosCompletionBase {
     }
 }
 
-impl Drop for RadosCompletionBase {
+impl Drop for RadosCompletionInner {
     fn drop(&mut self) {
         unsafe { rados_aio_release(self.completion) }
     }
