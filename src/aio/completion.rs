@@ -39,7 +39,7 @@ impl RadosCompletion {
     ///
     /// > **Note**: this function should only be called _during_ a `poll` operation. Since it creates and kicks off
     /// a completion immediately, setting it up during the creation of a [`Future`] is semantically incorrect, as
-    /// [`Future`]s should have no effect until they are polled. That is also the reason that this struct does
+    /// [`Future`]s should be lazy. That is also the reason that this struct does
     /// not implement [`Future`].
     ///
     /// # Safety
