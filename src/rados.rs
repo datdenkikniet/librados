@@ -16,6 +16,7 @@ pub enum FileConfig {
 
 #[derive(Debug, Clone)]
 pub struct RadosConfig {
+    id: Option<CString>,
     files: Vec<FileConfig>,
     argv: Vec<String>,
     env: Vec<String>,
@@ -31,11 +32,17 @@ impl Default for RadosConfig {
 impl RadosConfig {
     pub fn new(file: Option<FileConfig>) -> Self {
         Self {
+            id: None,
             files: file.into_iter().collect(),
             argv: Vec::new(),
             env: Vec::new(),
             rados_quiet: true,
         }
+    }
+
+    pub fn with_id(&mut self, id: Option<&str>) -> &mut Self {
+        self.id = id.map(|v| CString::new(v).expect("User contained NUL byte"));
+        self
     }
 
     pub fn with_files(mut self, files: Vec<FileConfig>) -> Self {
@@ -77,8 +84,13 @@ pub enum ConnectError {
 impl Rados {
     pub fn connect(config: &RadosConfig) -> Result<Self, ConnectError> {
         let mut rados: rados_t = std::ptr::null_mut();
+        let id = config
+            .id
+            .as_ref()
+            .map(|v| v.as_ptr())
+            .unwrap_or(std::ptr::null());
 
-        let create = unsafe { rados_create(&mut rados, std::ptr::null()) };
+        let create = unsafe { rados_create(&mut rados, id) };
 
         if create != 0 {
             return Err(ConnectError::Create);
