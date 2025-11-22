@@ -57,21 +57,23 @@ impl<'a> Future for GetXAttr<'a> {
         let object = self.object.as_ptr();
         let name = self.name.as_ptr();
 
-        let completion = self.completion.get_or_insert_with(|| {
-            let completion = RadosCompletion::new(false);
-
-            let len = unsafe {
-                rados_aio_getxattr(
+        let completion = self.completion.get_or_insert_with(|| unsafe {
+            RadosCompletion::new_with(false, |completion| {
+                // SAFETY: the values passed to this function are
+                // all pointers to pinned values that are available
+                // for the lifetime of `self`, which is also
+                let start = rados_aio_getxattr(
                     ctx,
                     object,
-                    completion.completion,
+                    completion,
                     name,
                     output_buf as _,
                     output_buf_len,
-                )
-            };
+                );
 
-            (len == 0).then_some(completion).ok_or(())
+                start == 0
+            })
+            .ok_or(())
         });
 
         let completion = match completion {
