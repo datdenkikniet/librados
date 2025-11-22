@@ -80,7 +80,7 @@ impl<'a> Future for GetXAttr<'a> {
         });
 
         if let Some(completion) = completion {
-            completion.poll(cx)
+            completion.poll(cx).map_err(GetXAttrError::Error)
         } else {
             return Poll::Ready(Err(GetXAttrError::CreateCompletion));
         }

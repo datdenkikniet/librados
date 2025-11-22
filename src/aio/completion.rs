@@ -39,14 +39,16 @@ impl RadosCompletion {
     ///
     /// > **Note**: this function should only be called _during_ a `poll` operation. Since it creates and kicks off
     /// a completion immediately, setting it up during the creation of a [`Future`] is semantically incorrect, as
-    /// [`Future`]s should be inactive until they are polled. That is also the reason that this struct does
+    /// [`Future`]s should have no effect until they are polled. That is also the reason that this struct does
     /// not implement [`Future`].
     ///
     /// # Safety
-    /// If `F` returns `false`, creation of the underlying completion
-    /// operation _must_ have failed. If it has succeeded, and the `complete`
-    /// or `safe` callback of this [`RadosCompletion`] are called, a double-free
-    /// will occur.
+    /// Calling `f` _must only_ return `false` if creation of the underlying completion
+    /// operation has failed. If `false` is returned, but the `complete` or `safe`
+    /// callback of this [`RadosCompletion`] are called anyways, a double-free will occur.
+    ///
+    /// Always returning `true` is allowed and does not cause UB. However, it does
+    /// cause memory to leak.
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
     pub unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
@@ -55,15 +57,12 @@ impl RadosCompletion {
     {
         Some(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
-            // as `RadosCompletionState::new_with`.
+            // as `RadosCompletionInner::new_with`.
             inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, f)? },
         })
     }
 
-    pub fn poll<E>(&mut self, cx: &mut Context) -> Poll<Result<usize, E>>
-    where
-        E: From<i32>,
-    {
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, i32>> {
         self.inner.poll(cx)
     }
 }
@@ -82,6 +81,8 @@ impl RadosCompletionInner {
     where
         F: FnOnce(rados_completion_t) -> bool,
     {
+        // SAFETY: `RadosCompletionInner::new_with` has the same safety requirements
+        // as `RadosCompletionBase::new_with`.
         let completion = unsafe { RadosCompletionBase::new_with(resolve_on_safe, f) };
 
         if let Some(completion) = completion {
@@ -91,10 +92,7 @@ impl RadosCompletionInner {
         }
     }
 
-    pub fn poll<E>(&mut self, cx: &mut Context) -> Poll<Result<usize, E>>
-    where
-        E: From<i32>,
-    {
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, i32>> {
         // Check if we need to update the internal state.
         match self {
             RadosCompletionInner::Pending(completion) => match completion.poll(cx) {
