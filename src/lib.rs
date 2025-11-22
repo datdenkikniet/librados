@@ -3,7 +3,7 @@ mod librados;
 
 use librados::*;
 
-mod r#async;
+mod aio;
 mod rados;
 
 use std::{ffi::CString, marker::PhantomData};

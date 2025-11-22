@@ -1,6 +1,6 @@
 use std::{ffi::CString, pin::Pin, task::Poll};
 
-use crate::{IoCtx, r#async::completion::RadosCompletion, librados::rados_aio_getxattr};
+use crate::{IoCtx, aio::completion::RadosCompletion, librados::rados_aio_getxattr};
 
 #[derive(Debug, Clone)]
 pub enum GetXAttrError {
