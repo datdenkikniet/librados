@@ -1,4 +1,7 @@
-use std::{ffi::c_void, task::Poll};
+use std::{
+    ffi::c_void,
+    task::{Context, Poll},
+};
 
 use futures::FutureExt;
 
@@ -7,10 +10,9 @@ use crate::librados::{
     rados_aio_is_safe, rados_aio_release, rados_completion_t,
 };
 
+#[derive(Debug)]
 pub struct RadosCompletion {
-    safe: bool,
-    completion: rados_completion_t,
-    rx: futures::channel::oneshot::Receiver<()>,
+    inner: RadosCompletionInner,
 }
 
 impl RadosCompletion {
@@ -48,6 +50,86 @@ impl RadosCompletion {
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
     pub unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
+    where
+        F: FnOnce(rados_completion_t) -> bool,
+    {
+        Some(Self {
+            // SAFETY: `RadosCompletion::new_with` has the same safety requirements
+            // as `RadosCompletionState::new_with`.
+            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, f)? },
+        })
+    }
+
+    pub fn poll<E>(&mut self, cx: &mut Context) -> Poll<Result<usize, E>>
+    where
+        E: From<i32>,
+    {
+        self.inner.poll(cx)
+    }
+}
+
+#[derive(Debug)]
+enum RadosCompletionInner {
+    Pending(RadosCompletionBase),
+    Completed(usize),
+    Failed(i32),
+}
+
+impl RadosCompletionInner {
+    /// # Safety
+    /// See [`RadosCompletion::new_with`].
+    pub unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
+    where
+        F: FnOnce(rados_completion_t) -> bool,
+    {
+        let completion = unsafe { RadosCompletionBase::new_with(resolve_on_safe, f) };
+
+        if let Some(completion) = completion {
+            Some(Self::Pending(completion))
+        } else {
+            None
+        }
+    }
+
+    pub fn poll<E>(&mut self, cx: &mut Context) -> Poll<Result<usize, E>>
+    where
+        E: From<i32>,
+    {
+        // Check if we need to update the internal state.
+        match self {
+            RadosCompletionInner::Pending(completion) => match completion.poll(cx) {
+                Poll::Ready(res) => {
+                    let new_state = match usize::try_from(res) {
+                        Ok(data) => Self::Completed(data),
+                        Err(_) => Self::Failed(res),
+                    };
+
+                    let _ = core::mem::replace(self, new_state);
+                }
+                Poll::Pending => {}
+            },
+            _ => {}
+        }
+
+        match self {
+            RadosCompletionInner::Pending(_) => Poll::Pending,
+            RadosCompletionInner::Completed(res) => Poll::Ready(Ok(*res)),
+            RadosCompletionInner::Failed(e) => Poll::Ready(Err((*e).into())),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RadosCompletionBase {
+    safe: bool,
+    completion: rados_completion_t,
+    rx: futures::channel::oneshot::Receiver<()>,
+}
+
+impl RadosCompletionBase {
+    /// # Safety
+    /// See [`RadosCompletion::new_with`].
+    unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
     where
         F: FnOnce(rados_completion_t) -> bool,
     {
@@ -104,7 +186,7 @@ impl RadosCompletion {
         }
     }
 
-    pub fn poll(&mut self, cx: &mut std::task::Context<'_>) -> core::task::Poll<i32> {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<i32> {
         if self.rx.poll_unpin(cx).is_ready() {
             if self.safe && unsafe { rados_aio_is_safe(self.completion) } != 0 {
                 let value = unsafe { rados_aio_get_return_value(self.completion) };
@@ -121,7 +203,7 @@ impl RadosCompletion {
     }
 }
 
-impl Drop for RadosCompletion {
+impl Drop for RadosCompletionBase {
     fn drop(&mut self) {
         unsafe { rados_aio_release(self.completion) }
     }
