@@ -14,7 +14,7 @@ impl<'rados> IoCtx<'rados> {
     pub fn get_xattrs<'io, 's>(
         &'io mut self,
         object: &'s str,
-    ) -> impl Future<Output = Result<ExtendedAttributes<'io, 'rados>, ()>> + Send {
+    ) -> impl Future<Output = Result<ExtendedAttributes<'io, 'rados>, i32>> + Send {
         let object = CString::new(object).expect("Object name had interior NUL.");
         GetXAttrs::new(self, object)
     }
@@ -41,7 +41,7 @@ impl<'io, 'rados> GetXAttrs<'io, 'rados> {
 }
 
 impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
-    type Output = Result<ExtendedAttributes<'io, 'rados>, ()>;
+    type Output = Result<ExtendedAttributes<'io, 'rados>, i32>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         const MSG: &'static str = "Re-polled completed GetXAttrs future";
@@ -59,18 +59,15 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
         });
 
         if let Some(completion) = completion {
-            completion
-                .poll(cx)
-                .map_ok(move |_| {
-                    let iterator = std::mem::replace(&mut self.iterator, std::ptr::null_mut());
-                    assert!(!iterator.is_null(), "{MSG}");
+            completion.poll(cx).map_ok(move |_| {
+                let iterator = std::mem::replace(&mut self.iterator, std::ptr::null_mut());
+                assert!(!iterator.is_null(), "{MSG}");
 
-                    // SAFETY: `iterator` is not null.
-                    unsafe { ExtendedAttributes::new(self.io.take().expect(MSG), iterator) }
-                })
-                .map_err(|_| ())
+                // SAFETY: `iterator` is not null.
+                unsafe { ExtendedAttributes::new(self.io.take().expect(MSG), iterator) }
+            })
         } else {
-            Poll::Ready(Err(()))
+            Poll::Ready(Err(i32::MIN))
         }
     }
 }
