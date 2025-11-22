@@ -31,16 +31,16 @@ impl IoCtx<'_> {
     }
 }
 
-struct GetXAttr<'io, 'buf> {
-    ctx: &'io IoCtx<'io>,
+struct GetXAttr<'io, 'rados, 'buf> {
+    ctx: &'io IoCtx<'rados>,
     object: CString,
     name: CString,
     buf: &'buf mut [u8],
     completion: Option<Option<RadosCompletion>>,
 }
 
-impl<'io, 'buf> GetXAttr<'io, 'buf> {
-    fn new(io: &'io IoCtx<'io>, object: CString, name: CString, buf: &'buf mut [u8]) -> Self {
+impl<'io, 'rados, 'buf> GetXAttr<'io, 'rados, 'buf> {
+    fn new(io: &'io IoCtx<'rados>, object: CString, name: CString, buf: &'buf mut [u8]) -> Self {
         Self {
             ctx: io,
             completion: None,
@@ -51,7 +51,7 @@ impl<'io, 'buf> GetXAttr<'io, 'buf> {
     }
 }
 
-impl Future for GetXAttr<'_, '_> {
+impl Future for GetXAttr<'_, '_, '_> {
     type Output = Result<usize, GetXAttrError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {

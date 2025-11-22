@@ -43,17 +43,17 @@ impl Drop for IoCtx<'_> {
     }
 }
 
-pub struct ExtendedAttributes<'a> {
-    _io: &'a IoCtx<'a>,
+pub struct ExtendedAttributes<'io, 'rados> {
+    _io: &'io mut IoCtx<'rados>,
     inner: rados_xattrs_iter_t,
 }
 
-unsafe impl Send for ExtendedAttributes<'_> {}
+unsafe impl<'io, 'rados> Send for ExtendedAttributes<'io, 'rados> where 'rados: 'io {}
 
-impl<'a> ExtendedAttributes<'a> {
+impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
     /// # Safety
     /// `inner` must be a valid, non-null [`rados_xattrs_iter_t`].
-    pub(crate) unsafe fn new(io: &'a IoCtx<'a>, inner: rados_xattrs_iter_t) -> Self {
+    pub(crate) unsafe fn new(io: &'io mut IoCtx<'rados>, inner: rados_xattrs_iter_t) -> Self {
         Self { _io: io, inner }
     }
 
@@ -77,7 +77,7 @@ impl<'a> ExtendedAttributes<'a> {
     }
 }
 
-impl Iterator for ExtendedAttributes<'_> {
+impl Iterator for ExtendedAttributes<'_, '_> {
     type Item = (String, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -85,7 +85,7 @@ impl Iterator for ExtendedAttributes<'_> {
     }
 }
 
-impl Drop for ExtendedAttributes<'_> {
+impl Drop for ExtendedAttributes<'_, '_> {
     fn drop(&mut self) {
         unsafe { rados_getxattrs_end(self.inner) }
     }

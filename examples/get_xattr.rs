@@ -19,7 +19,7 @@ async fn main() {
 
     let (xattr_len, xattrs) = tokio::join!(
         ctx1.get_xattr(&object, &xattr, &mut xattr_buf),
-        ctx2.get_xattrs(&object)
+        ctx2.get_xattrs(&object),
     );
 
     println!("Succes: {:02X?}!", &xattr_buf[..xattr_len.unwrap()]);
