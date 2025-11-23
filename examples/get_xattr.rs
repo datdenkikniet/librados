@@ -8,8 +8,8 @@ async fn main() {
     let object = args.next().expect("Object as 2nd argument");
 
     let config = RadosConfig::default();
-    let rados = Rados::connect(&config).unwrap();
-    let mut ctx = IoCtx::new(&rados, &pool).unwrap();
+    let mut rados = Rados::connect(&config).unwrap();
+    let mut ctx = IoCtx::new(&mut rados, &pool).unwrap();
 
     println!("Getting xattr iterator");
     let attrs: Vec<_> = ctx.get_xattrs(&object).await.unwrap().collect();

@@ -15,14 +15,14 @@ pub use rados::{Rados, RadosConfig};
 
 pub struct IoCtx<'rados> {
     inner: rados_ioctx_t,
-    _rados: PhantomData<&'rados Rados>,
+    _rados: PhantomData<&'rados ()>,
 }
 
 unsafe impl Send for IoCtx<'_> {}
 unsafe impl Sync for IoCtx<'_> {}
 
 impl<'rados> IoCtx<'rados> {
-    pub fn new(rados: &'rados Rados, pool: &str) -> Option<Self> {
+    pub fn new(rados: &'rados mut Rados, pool: &str) -> Option<Self> {
         let mut inner = std::ptr::null_mut();
         let name = CString::new(pool).unwrap();
 
