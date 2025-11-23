@@ -11,14 +11,19 @@ use crate::librados::{
 };
 
 #[derive(Debug)]
-pub struct RadosCompletion {
-    inner: RadosCompletionInner,
-    state: Poll<Result<usize, i32>>,
+pub struct RadosCompletion<T>
+where
+    T: 'static,
+{
+    inner: RadosCompletionInner<T>,
 }
 
-unsafe impl Send for RadosCompletion {}
+unsafe impl<T> Send for RadosCompletion<T> {}
 
-impl RadosCompletion {
+impl<T> RadosCompletion<T>
+where
+    T: 'static + core::fmt::Debug,
+{
     /// Create a new [`RadosCompletion`].
     ///
     /// The `resolve_on_safe` argument controls the stage at which the
@@ -54,84 +59,98 @@ impl RadosCompletion {
     /// cause memory to leak.
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
-    pub unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
+    pub unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
     where
-        F: FnOnce(rados_completion_t) -> bool,
+        F: FnOnce(rados_completion_t, *mut T) -> bool,
     {
         Some(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
             // as `RadosCompletionInner::new_with`.
-            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, f)? },
-            state: Poll::Pending,
+            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, state, f)? },
         })
     }
 
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, i32>> {
-        if self.state.is_pending() {
-            self.state = match self.inner.poll(cx) {
-                Poll::Ready(res) => {
-                    if let Ok(data) = usize::try_from(res) {
-                        Poll::Ready(Ok(data))
-                    } else {
-                        Poll::Ready(Err(res))
-                    }
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<(usize, T), i32>> {
+        match self.inner.poll(cx) {
+            Poll::Ready((res, state)) => {
+                if let Ok(data) = usize::try_from(res) {
+                    Poll::Ready(Ok((data, state)))
+                } else {
+                    Poll::Ready(Err(res))
                 }
-                Poll::Pending => Poll::Pending,
-            };
+            }
+            Poll::Pending => Poll::Pending,
         }
-
-        self.state.clone()
     }
 }
 
 #[derive(Debug)]
-struct RadosCompletionInner {
+struct RadosCompletionInner<T>
+where
+    T: 'static,
+{
     safe: bool,
     completion: rados_completion_t,
-    rx: futures::channel::oneshot::Receiver<()>,
+    rx: futures::channel::oneshot::Receiver<T>,
 }
 
-impl RadosCompletionInner {
+impl<T> RadosCompletionInner<T>
+where
+    T: 'static + core::fmt::Debug,
+{
     /// # Safety
     /// See [`RadosCompletion::new_with`].
-    unsafe fn new_with<F>(resolve_on_safe: bool, f: F) -> Option<Self>
+    unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
     where
-        F: FnOnce(rados_completion_t) -> bool,
+        F: FnOnce(rados_completion_t, *mut T) -> bool,
     {
-        type Tx = futures::channel::oneshot::Sender<()>;
-        let (tx, rx): (Tx, _) = futures::channel::oneshot::channel();
+        type Tx<T> = futures::channel::oneshot::Sender<T>;
+        let (tx, rx): (Tx<T>, _) = futures::channel::oneshot::channel();
+
+        struct State<T> {
+            generic: T,
+            channel: Tx<T>,
+        }
 
         /// The callback function used to indicate completion.
-        unsafe extern "C" fn wake_waker_and_drop_box(_: rados_completion_t, arg: *mut c_void) {
-            // SAFETY: `arg` is a type-erased pointer to a `Tx` that
+        unsafe extern "C" fn wake_waker_and_drop_box<T>(_: rados_completion_t, arg: *mut c_void) {
+            // SAFETY: `arg` is a type-erased pointer to a `State<Tx>` that
             // is constructed by calling `Box::into_raw`, and `from_raw`
             // is called exactly once for the passed-in value.
-            let boxed = unsafe { Box::from_raw(arg as *mut Tx) };
+            let boxed = unsafe { Box::from_raw(arg as *mut State<T>) };
             let arg = *boxed;
-            arg.send(()).ok();
+            arg.channel.send(arg.generic).ok();
         }
 
         let mut completion = std::ptr::null_mut();
 
+        let callback = wake_waker_and_drop_box::<T> as _;
         let (complete, safe) = if resolve_on_safe {
-            (None, Some(wake_waker_and_drop_box as _))
+            (None, Some(callback))
         } else {
-            (Some(wake_waker_and_drop_box as _), None)
+            (Some(callback), None)
         };
 
-        let tx = Box::into_raw(Box::new(tx));
+        let state = State {
+            generic: state,
+            channel: tx,
+        };
+
+        let state = Box::leak(Box::new(state));
+        let generic_state = core::ptr::from_mut(&mut state.generic);
 
         // SAFETY: `tx` is valid for the duration of the completion's existence,
         // and the function pointers are valid.
-        let completion_created =
-            unsafe { rados_aio_create_completion(tx as _, complete, safe, &mut completion) };
+        let completion_created = unsafe {
+            rados_aio_create_completion(state as *mut _ as _, complete, safe, &mut completion)
+        };
 
         assert!(
             completion_created == 0,
             "rados_aio_create_completion returned undocumented return code"
         );
 
-        if f(completion) {
+        if f(completion, generic_state) {
             Some(Self {
                 safe: false,
                 completion,
@@ -146,21 +165,23 @@ impl RadosCompletionInner {
             // SAFETY: `arg` is a pointer that is constructed by calling
             // `Box::into_raw`, and `from_raw` is called exactly once
             // for the pointer.
-            drop(unsafe { Box::from_raw(tx) });
+            drop(unsafe { Box::from_raw(state) });
             None
         }
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<i32> {
-        if self.rx.poll_unpin(cx).is_ready() {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<(i32, T)> {
+        if let Poll::Ready(state) = self.rx.poll_unpin(cx) {
+            let Ok(state) = state else { unreachable!() };
+
             if self.safe && unsafe { rados_aio_is_safe(self.completion) } != 0 {
                 let value = unsafe { rados_aio_get_return_value(self.completion) };
-                Poll::Ready(value)
+                Poll::Ready((value, state))
             } else if unsafe { rados_aio_is_complete(self.completion) } != 0 {
                 let value = unsafe { rados_aio_get_return_value(self.completion) };
-                Poll::Ready(value)
+                Poll::Ready((value, state))
             } else {
-                Poll::Pending
+                unreachable!()
             }
         } else {
             Poll::Pending
@@ -168,7 +189,7 @@ impl RadosCompletionInner {
     }
 }
 
-impl Drop for RadosCompletionInner {
+impl<T> Drop for RadosCompletionInner<T> {
     fn drop(&mut self) {
         unsafe { rados_aio_release(self.completion) }
     }

@@ -23,8 +23,7 @@ impl<'rados> IoCtx<'rados> {
 struct GetXAttrs<'io, 'rados> {
     io: Option<&'io mut IoCtx<'rados>>,
     object: CString,
-    completion: Option<Option<RadosCompletion>>,
-    iterator: rados_xattrs_iter_t,
+    completion: Option<Option<RadosCompletion<rados_xattrs_iter_t>>>,
 }
 
 unsafe impl<'io, 'rados> Send for GetXAttrs<'io, 'rados> {}
@@ -35,7 +34,6 @@ impl<'io, 'rados> GetXAttrs<'io, 'rados> {
             io: Some(io),
             object,
             completion: None,
-            iterator: std::ptr::null_mut(),
         }
     }
 }
@@ -49,19 +47,20 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
         let io = self.io.as_mut().expect(MSG).inner;
 
         let oid = self.object.as_ptr();
-        let iter = &raw mut self.iterator;
 
         let completion = self.completion.get_or_insert_with(|| unsafe {
-            RadosCompletion::new_with(false, |completion| {
+            RadosCompletion::new_with(false, rados_xattrs_iter_t::default(), |completion, iter| {
                 let create = rados_aio_getxattrs(io, oid, completion, iter);
                 create == 0
             })
         });
 
         if let Some(completion) = completion {
-            completion.poll(cx).map_ok(move |_| {
-                let iterator = std::mem::replace(&mut self.iterator, std::ptr::null_mut());
-                assert!(!iterator.is_null(), "{MSG}");
+            completion.poll(cx).map_ok(move |(_, iterator)| {
+                assert!(
+                    !iterator.is_null(),
+                    "Created iterator was null despite future returning Poll::Ready(Ok)"
+                );
 
                 // SAFETY: `iterator` is not null.
                 unsafe { ExtendedAttributes::new(self.io.take().expect(MSG), iterator) }

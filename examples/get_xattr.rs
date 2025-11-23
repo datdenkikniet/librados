@@ -15,12 +15,9 @@ async fn main() {
     let attrs: Vec<_> = ctx.get_xattrs(&object).await.unwrap().collect();
 
     for (key, value) in attrs {
-        let mut buffer = vec![0u8; value.len()];
-        let single_attr_len = ctx.get_xattr(&object, &key, &mut buffer).await.unwrap();
+        let single = ctx.get_xattr(&object, &key, value.len()).await.unwrap();
 
-        let single = &buffer[..single_attr_len];
-
-        assert_eq!(&value, single);
+        assert_eq!(value, single);
 
         println!(
             "Found extended attribute `{key}` containing {} bytes",
