@@ -74,9 +74,7 @@ impl Future for GetXAttr<'_, '_, '_> {
             // SAFETY: the passed-in closure returns `true` if and only
             // if creation of the async operation succeeds.
             unsafe {
-                RadosCompletion::new_with(false, data, |completion, data| {
-                    let data = &mut *data;
-
+                RadosCompletion::new_with(false, data, |completion, mut data| {
                     // SAFETY: the values passed to this function are
                     // all pointers to pinned values that are available
                     // for the lifetime of `self`, which is also

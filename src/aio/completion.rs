@@ -1,5 +1,6 @@
 use std::{
     ffi::c_void,
+    pin::Pin,
     task::{Context, Poll},
 };
 
@@ -61,7 +62,7 @@ where
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
     pub unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
     where
-        F: FnOnce(rados_completion_t, *mut T) -> bool,
+        F: FnOnce(rados_completion_t, Pin<&mut T>) -> bool,
     {
         Some(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
@@ -102,7 +103,7 @@ where
     /// See [`RadosCompletion::new_with`].
     unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
     where
-        F: FnOnce(rados_completion_t, *mut T) -> bool,
+        F: FnOnce(rados_completion_t, Pin<&mut T>) -> bool,
     {
         type Tx<T> = futures::channel::oneshot::Sender<T>;
         let (tx, rx): (Tx<T>, _) = futures::channel::oneshot::channel();
@@ -137,13 +138,14 @@ where
         };
 
         let state = Box::leak(Box::new(state));
-        let generic_state = core::ptr::from_mut(&mut state.generic);
 
         // SAFETY: `tx` is valid for the duration of the completion's existence,
         // and the function pointers are valid.
         let completion_created = unsafe {
             rados_aio_create_completion(state as *mut _ as _, complete, safe, &mut completion)
         };
+
+        let generic_state = unsafe { Pin::new_unchecked(&mut state.generic) };
 
         assert!(
             completion_created == 0,

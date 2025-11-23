@@ -49,10 +49,14 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
         let oid = self.object.as_ptr();
 
         let completion = self.completion.get_or_insert_with(|| unsafe {
-            RadosCompletion::new_with(false, rados_xattrs_iter_t::default(), |completion, iter| {
-                let create = rados_aio_getxattrs(io, oid, completion, iter);
-                create == 0
-            })
+            RadosCompletion::new_with(
+                false,
+                rados_xattrs_iter_t::default(),
+                |completion, mut iter| {
+                    let create = rados_aio_getxattrs(io, oid, completion, &raw mut *iter);
+                    create == 0
+                },
+            )
         });
 
         if let Some(completion) = completion {
