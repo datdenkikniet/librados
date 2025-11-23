@@ -4,14 +4,73 @@ mod librados;
 use librados::*;
 
 mod aio;
+mod bytecount;
 mod rados;
 
 use std::{
     ffi::{CStr, CString},
     marker::PhantomData,
+    mem::MaybeUninit,
 };
 
-pub use rados::{Rados, RadosConfig};
+pub use rados::{ClusterStats, Rados, RadosConfig};
+pub use bytecount::ByteCount;
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct PoolStats {
+    #[doc = "space used"]
+    pub used: ByteCount,
+    #[doc = "number of objects in the pool"]
+    pub objects: u64,
+    #[doc = "number of clones of objects"]
+    pub object_clones: u64,
+    #[doc = "num_objects * num_replicas"]
+    pub object_copies: u64,
+    #[doc = "number of objects missing on primary"]
+    pub objects_missing_on_primary: u64,
+    #[doc = "number of objects found on no OSDs"]
+    pub objects_unfound: u64,
+    #[doc = "number of objects replicated fewer times than they should be\n (but found on at least one OSD)"]
+    pub objects_degraded: u64,
+    #[doc = "number of objects read"]
+    pub objects_read: u64,
+    #[doc = "number of bytes read from objects"]
+    pub object_bytes_read: ByteCount,
+    #[doc = "number of objects written"]
+    pub objects_written: u64,
+    #[doc = "amount of bytes written to objects"]
+    pub object_bytes_written: ByteCount,
+    #[doc = "bytes originally provided by user"]
+    pub user_bytes: ByteCount,
+    #[doc = "amount of bytes passed to pool"]
+    pub compressed_bytes_orig: ByteCount,
+    #[doc = "space used by all data after compression"]
+    pub compressed_bytes: ByteCount,
+    #[doc = "bytes allocated at storage"]
+    pub compressed_bytes_alloc: ByteCount,
+}
+
+impl From<rados_pool_stat_t> for PoolStats {
+    fn from(value: rados_pool_stat_t) -> Self {
+        Self {
+            used: ByteCount::from_bytes(value.num_bytes),
+            objects: value.num_objects,
+            object_clones: value.num_object_clones,
+            object_copies: value.num_object_copies,
+            objects_missing_on_primary: value.num_objects_missing_on_primary,
+            objects_unfound: value.num_objects_unfound,
+            objects_degraded: value.num_objects_degraded,
+            objects_read: value.num_rd,
+            object_bytes_read: ByteCount::from_kb(value.num_rd_kb),
+            objects_written: value.num_wr,
+            object_bytes_written: ByteCount::from_kb(value.num_wr_kb),
+            user_bytes: ByteCount::from_bytes(value.num_user_bytes),
+            compressed_bytes_orig: ByteCount::from_bytes(value.compressed_bytes_orig),
+            compressed_bytes: ByteCount::from_bytes(value.compressed_bytes),
+            compressed_bytes_alloc: ByteCount::from_bytes(value.compressed_bytes_alloc),
+        }
+    }
+}
 
 pub struct IoCtx<'rados> {
     inner: rados_ioctx_t,
@@ -33,6 +92,19 @@ impl<'rados> IoCtx<'rados> {
             })
         } else {
             None
+        }
+    }
+
+    pub fn pool_stats(&mut self) -> Result<PoolStats, i32> {
+        let mut stat = MaybeUninit::uninit();
+
+        let res = unsafe { rados_ioctx_pool_stat(self.inner, stat.as_mut_ptr()) };
+
+        if res != 0 {
+            Err(res)
+        } else {
+            let stat = unsafe { stat.assume_init() };
+            Ok(stat.into())
         }
     }
 }

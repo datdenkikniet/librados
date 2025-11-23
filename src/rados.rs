@@ -1,12 +1,16 @@
 use std::{
     ffi::{CStr, CString},
+    mem::MaybeUninit,
     sync::Mutex,
 };
 
-use crate::librados::{
-    LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_conf_parse_argv,
-    rados_conf_parse_env, rados_conf_read_file, rados_conf_set, rados_connect, rados_create,
-    rados_shutdown, rados_t, rados_version,
+use crate::{
+    ByteCount,
+    librados::{
+        LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_cluster_stat,
+        rados_cluster_stat_t, rados_conf_parse_argv, rados_conf_parse_env, rados_conf_read_file,
+        rados_conf_set, rados_connect, rados_create, rados_shutdown, rados_t, rados_version,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -64,6 +68,29 @@ impl RadosConfig {
     pub fn set_rados_quiet(&mut self, quiet: bool) -> &mut Self {
         self.rados_quiet = quiet;
         self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClusterStats {
+    #[doc = "total device size"]
+    pub size: ByteCount,
+    #[doc = "total used"]
+    pub used: ByteCount,
+    #[doc = "total available/free"]
+    pub available: ByteCount,
+    #[doc = "number of objects"]
+    pub num_objects: u64,
+}
+
+impl From<rados_cluster_stat_t> for ClusterStats {
+    fn from(value: rados_cluster_stat_t) -> Self {
+        Self {
+            size: ByteCount::from_kb(value.kb),
+            used: ByteCount::from_kb(value.kb_used),
+            available: ByteCount::from_kb(value.kb_avail),
+            num_objects: value.num_objects,
+        }
     }
 }
 
@@ -197,6 +224,19 @@ impl Rados {
         }
 
         Ok(Self(rados))
+    }
+
+    pub fn cluster_stats(&mut self) -> Result<ClusterStats, i32> {
+        let mut cluster_stats = MaybeUninit::uninit();
+
+        let res = unsafe { rados_cluster_stat(self.0, cluster_stats.as_mut_ptr()) };
+
+        if res != 0 {
+            Err(res)
+        } else {
+            let stats = unsafe { cluster_stats.assume_init() };
+            Ok(stats.into())
+        }
     }
 }
 
