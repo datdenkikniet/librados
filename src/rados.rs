@@ -5,7 +5,8 @@ use std::{
 };
 
 use crate::{
-    ByteCount,
+    ByteCount, RadosError, Result,
+    error::maybe_err,
     librados::{
         LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_cluster_stat,
         rados_cluster_stat_t, rados_conf_parse_argv, rados_conf_parse_env, rados_conf_read_file,
@@ -101,16 +102,16 @@ unsafe impl Send for Rados {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectError {
-    Create,
-    ReadDefaultFileConfig,
-    ReadFileConfig(String),
-    ParseEnv(String),
-    ParseArgv,
-    Connect,
+    Create(RadosError),
+    ReadDefaultFileConfig(RadosError),
+    ReadFileConfig(RadosError, String),
+    ParseEnv(RadosError, String),
+    ParseArgv(RadosError),
+    Connect(RadosError),
 }
 
 impl Rados {
-    pub fn connect(config: &RadosConfig) -> Result<Self, ConnectError> {
+    pub fn connect(config: &RadosConfig) -> std::result::Result<Self, ConnectError> {
         let (mut maj, mut min, mut ext) = (0i32, 0i32, 0i32);
 
         unsafe { rados_version(&mut maj, &mut min, &mut ext) };
@@ -136,29 +137,19 @@ impl Rados {
             .map(|v| v.as_ptr())
             .unwrap_or(std::ptr::null());
 
-        let create = unsafe { rados_create(&mut rados, id) };
-
-        if create != 0 {
-            return Err(ConnectError::Create);
-        }
+        maybe_err(unsafe { rados_create(&mut rados, id) }).map_err(ConnectError::Create)?;
 
         for file in config.files.iter() {
             match file {
                 FileConfig::Default => {
                     let path = std::ptr::null();
-                    let read = unsafe { rados_conf_read_file(rados, path) };
-
-                    if read != 0 {
-                        return Err(ConnectError::ReadDefaultFileConfig);
-                    }
+                    maybe_err(unsafe { rados_conf_read_file(rados, path) })
+                        .map_err(ConnectError::ReadDefaultFileConfig)?;
                 }
-                FileConfig::Path(path) => {
-                    let path = CString::new(path.as_bytes()).unwrap();
-                    let read = unsafe { rados_conf_read_file(rados, path.as_ptr()) };
-
-                    if read != 0 {
-                        return Err(ConnectError::ReadFileConfig(path.to_string_lossy().into()));
-                    }
+                FileConfig::Path(in_path) => {
+                    let path = CString::new(in_path.as_bytes()).unwrap();
+                    maybe_err(unsafe { rados_conf_read_file(rados, path.as_ptr()) })
+                        .map_err(|e| ConnectError::ReadFileConfig(e, in_path.into()))?;
                 }
             }
         }
@@ -171,12 +162,9 @@ impl Rados {
 
             let var = CString::new(env.as_bytes()).unwrap();
             let guard = PARSE_ENV_LOCK.lock().unwrap();
-            let read = unsafe { rados_conf_parse_env(rados, var.as_ptr()) };
+            maybe_err(unsafe { rados_conf_parse_env(rados, var.as_ptr()) })
+                .map_err(|e| ConnectError::ParseEnv(e, env.to_string()))?;
             drop(guard);
-
-            if read != 0 {
-                return Err(ConnectError::ParseEnv(var.to_string_lossy().into()));
-            }
         }
 
         if !config.argv.is_empty() {
@@ -188,13 +176,12 @@ impl Rados {
 
             let mut argv_ptr: Vec<_> = argv.iter().map(|v| v.as_ptr()).collect();
 
-            let read =
-                unsafe { rados_conf_parse_argv(rados, argv.len() as _, argv_ptr.as_mut_ptr()) };
-            drop(argv);
+            maybe_err(unsafe {
+                rados_conf_parse_argv(rados, argv.len() as _, argv_ptr.as_mut_ptr())
+            })
+            .map_err(ConnectError::ParseArgv)?;
 
-            if read != 0 {
-                return Err(ConnectError::ParseArgv);
-            }
+            drop(argv);
         }
 
         if config.rados_quiet {
@@ -217,26 +204,18 @@ impl Rados {
             );
         }
 
-        let connect = unsafe { rados_connect(rados) };
-
-        if connect != 0 {
-            return Err(ConnectError::Connect);
-        }
+        maybe_err(unsafe { rados_connect(rados) }).map_err(ConnectError::Connect)?;
 
         Ok(Self(rados))
     }
 
-    pub fn cluster_stats(&mut self) -> Result<ClusterStats, i32> {
+    pub fn cluster_stats(&mut self) -> Result<ClusterStats> {
         let mut cluster_stats = MaybeUninit::uninit();
 
-        let res = unsafe { rados_cluster_stat(self.0, cluster_stats.as_mut_ptr()) };
+        maybe_err(unsafe { rados_cluster_stat(self.0, cluster_stats.as_mut_ptr()) })?;
 
-        if res != 0 {
-            Err(res)
-        } else {
-            let stats = unsafe { cluster_stats.assume_init() };
-            Ok(stats.into())
-        }
+        let stats = unsafe { cluster_stats.assume_init() };
+        Ok(stats.into())
     }
 }
 

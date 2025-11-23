@@ -6,9 +6,12 @@ use std::{
 
 use futures::FutureExt;
 
-use crate::librados::{
-    rados_aio_create_completion, rados_aio_get_return_value, rados_aio_is_complete,
-    rados_aio_is_safe, rados_aio_release, rados_completion_t,
+use crate::{
+    Result,
+    librados::{
+        rados_aio_create_completion, rados_aio_get_return_value, rados_aio_is_complete,
+        rados_aio_is_safe, rados_aio_release, rados_completion_t,
+    },
 };
 
 #[derive(Debug)]
@@ -71,13 +74,13 @@ where
         })
     }
 
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<(usize, T), i32>> {
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<(usize, T)>> {
         match self.inner.poll(cx) {
             Poll::Ready((res, state)) => {
                 if let Ok(data) = usize::try_from(res) {
                     Poll::Ready(Ok((data, state)))
                 } else {
-                    Poll::Ready(Err(res))
+                    Poll::Ready(Err(res.into()))
                 }
             }
             Poll::Pending => Poll::Pending,

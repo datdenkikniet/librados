@@ -5,6 +5,7 @@ use librados::*;
 
 mod aio;
 mod bytecount;
+mod error;
 mod rados;
 
 use std::{
@@ -13,8 +14,11 @@ use std::{
     mem::MaybeUninit,
 };
 
-pub use rados::{ClusterStats, Rados, RadosConfig};
 pub use bytecount::ByteCount;
+pub use error::{RadosError, Result};
+pub use rados::{ClusterStats, Rados, RadosConfig};
+
+use crate::error::maybe_err;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct PoolStats {
@@ -81,31 +85,23 @@ unsafe impl Send for IoCtx<'_> {}
 unsafe impl Sync for IoCtx<'_> {}
 
 impl<'rados> IoCtx<'rados> {
-    pub fn new(rados: &'rados mut Rados, pool: &str) -> Option<Self> {
+    pub fn new(rados: &'rados mut Rados, pool: &str) -> Result<Self> {
         let mut inner = std::ptr::null_mut();
         let name = CString::new(pool).unwrap();
 
-        if unsafe { rados_ioctx_create(rados.0, name.as_ptr(), &mut inner) } == 0 {
-            Some(Self {
-                inner,
-                _rados: PhantomData::default(),
-            })
-        } else {
-            None
-        }
+        maybe_err(unsafe { rados_ioctx_create(rados.0, name.as_ptr(), &mut inner) })?;
+
+        Ok(Self {
+            inner,
+            _rados: PhantomData::default(),
+        })
     }
 
-    pub fn pool_stats(&mut self) -> Result<PoolStats, i32> {
+    pub fn pool_stats(&mut self) -> Result<PoolStats> {
         let mut stat = MaybeUninit::uninit();
-
-        let res = unsafe { rados_ioctx_pool_stat(self.inner, stat.as_mut_ptr()) };
-
-        if res != 0 {
-            Err(res)
-        } else {
-            let stat = unsafe { stat.assume_init() };
-            Ok(stat.into())
-        }
+        maybe_err(unsafe { rados_ioctx_pool_stat(self.inner, stat.as_mut_ptr()) })?;
+        let stat = unsafe { stat.assume_init() };
+        Ok(stat.into())
     }
 }
 
@@ -129,16 +125,14 @@ impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
         Self { _io: io, inner }
     }
 
-    pub fn try_next<'a>(&'a mut self) -> Result<Option<(&'a CStr, &'a [u8])>, i32> {
+    pub fn try_next<'a>(&'a mut self) -> Result<Option<(&'a CStr, &'a [u8])>> {
         let mut name = std::ptr::null();
         let mut val = std::ptr::null();
         let mut val_len = 0;
 
-        let get = unsafe { rados_getxattrs_next(self.inner, &mut name, &mut val, &mut val_len) };
+        maybe_err(unsafe { rados_getxattrs_next(self.inner, &mut name, &mut val, &mut val_len) })?;
 
-        if get != 0 {
-            Err(get)
-        } else if name == std::ptr::null() && val == std::ptr::null() && val_len == 0 {
+        if name == std::ptr::null() && val == std::ptr::null() && val_len == 0 {
             Ok(None)
         } else {
             assert!(!name.is_null());

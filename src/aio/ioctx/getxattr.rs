@@ -1,15 +1,15 @@
 use std::{ffi::CString, pin::Pin, str::FromStr, task::Poll};
 
-use crate::{IoCtx, aio::completion::RadosCompletion, librados::rados_aio_getxattr};
+use crate::{IoCtx, RadosError, aio::completion::RadosCompletion, librados::rados_aio_getxattr};
 
 #[derive(Debug, Clone)]
 pub enum GetXAttrError {
     CreateCompletion,
-    Error(i32),
+    Error(RadosError),
 }
 
-impl From<i32> for GetXAttrError {
-    fn from(value: i32) -> Self {
+impl From<RadosError> for GetXAttrError {
+    fn from(value: RadosError) -> Self {
         Self::Error(value)
     }
 }
