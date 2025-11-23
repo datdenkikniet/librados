@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::librados::{
-    rados_conf_parse_argv, rados_conf_parse_env, rados_conf_read_file, rados_conf_set,
-    rados_connect, rados_create, rados_shutdown, rados_t,
+    LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_conf_parse_argv,
+    rados_conf_parse_env, rados_conf_read_file, rados_conf_set, rados_connect, rados_create,
+    rados_shutdown, rados_t, rados_version,
 };
 
 #[derive(Debug, Clone)]
@@ -83,6 +84,24 @@ pub enum ConnectError {
 
 impl Rados {
     pub fn connect(config: &RadosConfig) -> Result<Self, ConnectError> {
+        let (mut maj, mut min, mut ext) = (0i32, 0i32, 0i32);
+
+        unsafe { rados_version(&mut maj, &mut min, &mut ext) };
+
+        if maj != LIBRADOS_VER_MAJOR as i32 {
+            let env = std::env::var("LIBRADOS_SKIP_VERSION_CHECK").ok();
+            let skip = match env.as_ref().map(|v| v.as_str()) {
+                Some("yes") | Some("true") | Some("skip") => true,
+                _ => false,
+            };
+
+            if !skip {
+                panic!(
+                    "The version of `librados` on this system ({maj}.{min}.{ext}) is incompatible with the version that the `librados` crate was built for ({LIBRADOS_VER_MAJOR}.{LIBRADOS_VER_MINOR}.{LIBRADOS_VER_EXTRA})."
+                );
+            }
+        }
+
         let mut rados: rados_t = std::ptr::null_mut();
         let id = config
             .id
