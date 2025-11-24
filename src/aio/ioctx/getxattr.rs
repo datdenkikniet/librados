@@ -16,7 +16,7 @@ impl From<RadosError> for GetXAttrError {
 
 impl IoCtx<'_> {
     pub fn get_xattr<'io, 'data>(
-        &'io mut self,
+        &'io self,
         object: &'data str,
         name: &'data str,
         buf_size: usize,

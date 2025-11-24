@@ -12,7 +12,7 @@ use crate::{
 
 impl<'rados> IoCtx<'rados> {
     pub fn get_xattrs<'io, 's>(
-        &'io mut self,
+        &'io self,
         object: &'s str,
     ) -> impl Future<Output = Result<ExtendedAttributes>> + Send {
         let object = CString::new(object).expect("Object name had interior NUL.");
@@ -21,7 +21,7 @@ impl<'rados> IoCtx<'rados> {
 }
 
 struct GetXAttrs<'io, 'rados> {
-    io: Option<&'io mut IoCtx<'rados>>,
+    io: &'io IoCtx<'rados>,
     object: CString,
     completion: Option<Option<RadosCompletion<rados_xattrs_iter_t>>>,
 }
@@ -29,9 +29,9 @@ struct GetXAttrs<'io, 'rados> {
 unsafe impl<'io, 'rados> Send for GetXAttrs<'io, 'rados> {}
 
 impl<'io, 'rados> GetXAttrs<'io, 'rados> {
-    pub fn new(io: &'io mut IoCtx<'rados>, object: CString) -> Self {
+    pub fn new(io: &'io IoCtx<'rados>, object: CString) -> Self {
         Self {
-            io: Some(io),
+            io,
             object,
             completion: None,
         }
@@ -42,9 +42,7 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
     type Output = Result<ExtendedAttributes>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        const MSG: &'static str = "Re-polled completed GetXAttrs future";
-
-        let io = self.io.as_mut().expect(MSG).inner();
+        let io = self.io.inner();
 
         let oid = self.object.as_ptr();
 

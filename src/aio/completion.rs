@@ -177,7 +177,9 @@ where
 
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<(i32, T)> {
         if let Poll::Ready(state) = self.rx.poll_unpin(cx) {
-            let Ok(state) = state else { unreachable!() };
+            let Ok(state) = state else {
+                panic!("Re-polled completed future")
+            };
 
             if self.safe && unsafe { rados_aio_is_safe(self.completion) } != 0 {
                 let value = unsafe { rados_aio_get_return_value(self.completion) };
