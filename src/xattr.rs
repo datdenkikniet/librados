@@ -26,6 +26,11 @@ impl ExtendedAttributes {
         Self { inner }
     }
 
+    /// Try to read the next item in the list.
+    ///
+    /// This function will return `Err` if the underlying operation
+    /// fails. Currently, the only way for this to happen is for `ENOMEM`
+    /// to be returned.
     pub fn try_next<'a>(&'a mut self) -> Result<Option<(&'a CStr, &'a [u8])>> {
         let mut name = std::ptr::null();
         let mut val = std::ptr::null();
@@ -35,6 +40,15 @@ impl ExtendedAttributes {
 
         if name == std::ptr::null() && val == std::ptr::null() && val_len == 0 {
             Ok(None)
+        }
+        // Special case: `rados_getxattrs_next` returns `name != NULL && val == NULL && val_len = 0`
+        // for xattrs with a value of length 0. However, `core::slice::from_raw_parts` requires a
+        // non-null pointer, so we must deal with this case separately.
+        else if name != std::ptr::null() && val == std::ptr::null() && val_len == 0 {
+            let name = unsafe { CStr::from_ptr(name) };
+            let val = unsafe { core::slice::from_raw_parts(std::ptr::dangling(), 0) };
+
+            Ok(Some((name, val)))
         } else {
             assert!(!name.is_null());
             assert!(!val.is_null());

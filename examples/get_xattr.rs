@@ -12,13 +12,14 @@ async fn main() {
     let ctx = IoCtx::new(&mut rados, &pool).unwrap();
 
     println!("Getting xattr iterator");
-    let attrs: Vec<_> = ctx.get_xattrs(&object).await.unwrap().collect();
+    let mut attrs = ctx.get_xattrs(&object).await.unwrap();
 
-    for (key, value) in attrs {
+    // `ExtendedAttributes` implements `Iterator`, but also supports
+    // borrowing iteration through [`ExtendedAttributes::try_next`].
+    while let Ok(Some((key, value))) = attrs.try_next() {
+        let key = key.to_string_lossy();
         let single = ctx.get_xattr(&object, &key, value.len()).await.unwrap();
-
         assert_eq!(value, single);
-
         println!(
             "Found extended attribute `{key}` containing {} bytes",
             value.len()
