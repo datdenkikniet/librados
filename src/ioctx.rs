@@ -1,3 +1,18 @@
+//! Wrapped access to [`rados_ioctx_t`].
+//!
+//! Access to data owned by an [`rados_ioctx_t`] through `librados` functions
+//! is thread-safe, so handing immutable references, and implementing both
+//! `Send` and `Sync` for this type are OK, provided that the pointer is bound
+//! to the lifetime of the underpinning [`rados_t`].
+//!
+//! The only exception is managing configuration of the [`rados_ioctx_t`] itself ([ref][0]).
+//! This is solved by requiring exclusive access through an `&mut self` receiver.
+//!
+//! `librados` was made almost fully thread-safe back in [`v0.53`][1].
+//!
+//! [0]: https://docs.ceph.com/en/reef/rados/api/librados/#c.rados_ioctx_t
+//! [1]: https://tracker.ceph.com/issues/2525
+
 use std::{ffi::CString, marker::PhantomData, mem::MaybeUninit};
 
 use crate::{
