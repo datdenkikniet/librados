@@ -1,23 +1,29 @@
 use std::ffi::CStr;
 
 use crate::{
-    IoCtx, Result,
+    Result,
     error::maybe_err,
     librados::{rados_getxattrs_end, rados_getxattrs_next, rados_xattrs_iter_t},
 };
 
-pub struct ExtendedAttributes<'io, 'rados> {
-    _io: &'io mut IoCtx<'rados>,
+/// An iterator over the extended attributes of a file.
+pub struct ExtendedAttributes {
+    /// The underlying `rados_xattrs_iter_t`.
+    ///
+    /// This pointer is the effective equivalent of an
+    /// `std::vec::IntoIter<(&CStr, &[u8])>`, with the
+    /// important caveat that the returned references
+    /// are only valid until the next iteration.
     inner: rados_xattrs_iter_t,
 }
 
-unsafe impl<'io, 'rados> Send for ExtendedAttributes<'io, 'rados> where 'rados: 'io {}
+unsafe impl Send for ExtendedAttributes {}
 
-impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
+impl ExtendedAttributes {
     /// # Safety
     /// `inner` must be a valid, non-null [`rados_xattrs_iter_t`].
-    pub(crate) unsafe fn new(io: &'io mut IoCtx<'rados>, inner: rados_xattrs_iter_t) -> Self {
-        Self { _io: io, inner }
+    pub(crate) unsafe fn new(inner: rados_xattrs_iter_t) -> Self {
+        Self { inner }
     }
 
     pub fn try_next<'a>(&'a mut self) -> Result<Option<(&'a CStr, &'a [u8])>> {
@@ -41,7 +47,7 @@ impl<'io, 'rados> ExtendedAttributes<'io, 'rados> {
     }
 }
 
-impl Iterator for ExtendedAttributes<'_, '_> {
+impl Iterator for ExtendedAttributes {
     type Item = (String, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -52,7 +58,7 @@ impl Iterator for ExtendedAttributes<'_, '_> {
     }
 }
 
-impl Drop for ExtendedAttributes<'_, '_> {
+impl Drop for ExtendedAttributes {
     fn drop(&mut self) {
         unsafe { rados_getxattrs_end(self.inner) }
     }

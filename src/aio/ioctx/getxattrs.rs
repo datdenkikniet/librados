@@ -14,7 +14,7 @@ impl<'rados> IoCtx<'rados> {
     pub fn get_xattrs<'io, 's>(
         &'io mut self,
         object: &'s str,
-    ) -> impl Future<Output = Result<ExtendedAttributes<'io, 'rados>>> + Send {
+    ) -> impl Future<Output = Result<ExtendedAttributes>> + Send {
         let object = CString::new(object).expect("Object name had interior NUL.");
         GetXAttrs::new(self, object)
     }
@@ -39,7 +39,7 @@ impl<'io, 'rados> GetXAttrs<'io, 'rados> {
 }
 
 impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
-    type Output = Result<ExtendedAttributes<'io, 'rados>>;
+    type Output = Result<ExtendedAttributes>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         const MSG: &'static str = "Re-polled completed GetXAttrs future";
@@ -67,7 +67,7 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
                 );
 
                 // SAFETY: `iterator` is not null.
-                unsafe { ExtendedAttributes::new(self.io.take().expect(MSG), iterator) }
+                unsafe { ExtendedAttributes::new(iterator) }
             })
         } else {
             Poll::Ready(Err(i32::MIN.into()))
