@@ -9,7 +9,7 @@ async fn main() {
 
     let config = RadosConfig::default();
     let mut rados = Rados::connect(&config).unwrap();
-    let mut ctx = IoCtx::new(&mut rados, &pool).unwrap();
+    let ctx = IoCtx::new(&mut rados, &pool).unwrap();
 
     println!("Getting xattr iterator");
     let attrs: Vec<_> = ctx.get_xattrs(&object).await.unwrap().collect();

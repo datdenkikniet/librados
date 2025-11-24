@@ -37,7 +37,7 @@ impl<'rados> IoCtx<'rados> {
         let mut inner = std::ptr::null_mut();
         let name = CString::new(pool).unwrap();
 
-        maybe_err(unsafe { rados_ioctx_create(rados.0, name.as_ptr(), &mut inner) })?;
+        maybe_err(unsafe { rados_ioctx_create(rados.inner(), name.as_ptr(), &mut inner) })?;
 
         Ok(Self {
             inner,

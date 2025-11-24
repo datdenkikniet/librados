@@ -96,7 +96,7 @@ impl From<rados_cluster_stat_t> for ClusterStats {
 }
 
 #[derive(Debug)]
-pub struct Rados(pub(crate) rados_t);
+pub struct Rados(rados_t);
 
 unsafe impl Send for Rados {}
 
@@ -216,6 +216,10 @@ impl Rados {
 
         let stats = unsafe { cluster_stats.assume_init() };
         Ok(stats.into())
+    }
+
+    pub fn inner(&self) -> rados_t {
+        self.0
     }
 }
 
