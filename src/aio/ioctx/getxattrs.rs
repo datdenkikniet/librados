@@ -44,7 +44,7 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         const MSG: &'static str = "Re-polled completed GetXAttrs future";
 
-        let io = self.io.as_mut().expect(MSG).inner;
+        let io = self.io.as_mut().expect(MSG).inner();
 
         let oid = self.object.as_ptr();
 

@@ -62,7 +62,7 @@ impl Future for GetXAttr<'_, '_, '_> {
         let buf_size = self.buf_size;
         let name = self.name;
         let object = self.object;
-        let ctx = self.ctx.inner;
+        let ctx = self.ctx.inner();
 
         let completion = self.completion.get_or_insert_with(|| {
             let data = Data {
