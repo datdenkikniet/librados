@@ -25,4 +25,10 @@ async fn main() {
             value.len()
         );
     }
+
+    for (k, v) in ctx.get_omap_vals(&object).unwrap() {
+        let key = std::str::from_utf8(&k).unwrap();
+
+        println!("Found omap `{key}` of {} bytes.", v.len());
+    }
 }
