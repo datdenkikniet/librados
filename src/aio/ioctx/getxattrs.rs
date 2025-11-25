@@ -7,6 +7,7 @@ use std::{
 use crate::{
     ExtendedAttributes, IoCtx, Result,
     aio::completion::RadosCompletion,
+    error::maybe_err,
     librados::{rados_aio_getxattrs, rados_xattrs_iter_t},
 };
 
@@ -23,7 +24,7 @@ impl<'rados> IoCtx<'rados> {
 struct GetXAttrs<'io, 'rados> {
     io: &'io IoCtx<'rados>,
     object: CString,
-    completion: Option<Option<RadosCompletion<rados_xattrs_iter_t>>>,
+    completion: Option<crate::Result<RadosCompletion<rados_xattrs_iter_t>>>,
 }
 
 unsafe impl<'io, 'rados> Send for GetXAttrs<'io, 'rados> {}
@@ -51,13 +52,12 @@ impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
                 false,
                 rados_xattrs_iter_t::default(),
                 |completion, mut iter| {
-                    let create = rados_aio_getxattrs(io, oid, completion, &raw mut *iter);
-                    create == 0
+                    maybe_err(rados_aio_getxattrs(io, oid, completion, &raw mut *iter))
                 },
             )
         });
 
-        if let Some(completion) = completion {
+        if let Ok(completion) = completion {
             completion.poll(cx).map_ok(move |(_, iterator)| {
                 assert!(
                     !iterator.is_null(),

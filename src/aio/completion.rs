@@ -55,19 +55,19 @@ where
     /// not implement [`Future`].
     ///
     /// # Safety
-    /// Calling `f` _must only_ return `false` if creation of the underlying completion
-    /// operation has failed. If `false` is returned, but the `complete` or `safe`
+    /// Calling `f` _must only_ return `Err(_)` if creation of the underlying completion
+    /// operation has failed. If `Err(_)` is returned, but the `complete` or `safe`
     /// callback of this [`RadosCompletion`] are called anyways, a double-free will occur.
     ///
-    /// Always returning `true` is allowed and does not cause UB. However, it does
+    /// Always returning `Ok(())` is allowed and does not cause UB. However, it does
     /// cause memory to leak.
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
-    pub unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
+    pub unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Result<Self>
     where
-        F: FnOnce(rados_completion_t, Pin<&mut T>) -> bool,
+        F: FnOnce(rados_completion_t, Pin<&mut T>) -> Result<()>,
     {
-        Some(Self {
+        Ok(Self {
             // SAFETY: `RadosCompletion::new_with` has the same safety requirements
             // as `RadosCompletionInner::new_with`.
             inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, state, f)? },
@@ -104,9 +104,9 @@ where
 {
     /// # Safety
     /// See [`RadosCompletion::new_with`].
-    unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Option<Self>
+    unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Result<Self>
     where
-        F: FnOnce(rados_completion_t, Pin<&mut T>) -> bool,
+        F: FnOnce(rados_completion_t, Pin<&mut T>) -> Result<()>,
     {
         type Tx<T> = futures::channel::oneshot::Sender<T>;
         let (tx, rx): (Tx<T>, _) = futures::channel::oneshot::channel();
@@ -155,13 +155,9 @@ where
             "rados_aio_create_completion returned undocumented return code"
         );
 
-        if f(completion, generic_state) {
-            Some(Self {
-                safe: false,
-                completion,
-                rx,
-            })
-        } else {
+        let start = f(completion, generic_state);
+
+        if start.is_err() {
             // Creation of completion operation failed, so the wake-and-drop
             // callback will never be called.
             //
@@ -171,8 +167,13 @@ where
             // `Box::into_raw`, and `from_raw` is called exactly once
             // for the pointer.
             drop(unsafe { Box::from_raw(state) });
-            None
         }
+
+        Ok(Self {
+            safe: resolve_on_safe,
+            completion,
+            rx,
+        })
     }
 
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<(i32, T)> {

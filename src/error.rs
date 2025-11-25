@@ -20,6 +20,7 @@ impl From<i32> for RadosError {
         let value = value.abs();
 
         match value {
+            2 => Self::Noent,
             v => Self::Unknown(v),
         }
     }

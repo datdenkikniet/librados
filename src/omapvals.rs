@@ -72,7 +72,7 @@ impl Drop for OmapKeyValues {
 }
 
 impl<'rados> IoCtx<'rados> {
-    pub fn get_omap_vals(&self, object: &str) -> Result<OmapKeyValues> {
+    pub fn get_omap_vals_blocking(&self, object: &str) -> Result<OmapKeyValues> {
         let operation = OmapGetVals {
             start_after: None,
             filter_prefix: None,
@@ -82,6 +82,18 @@ impl<'rados> IoCtx<'rados> {
         let executor = ReadOpExecutor::new(self, operation)?;
 
         executor.execute(object)
+    }
+
+    pub async fn get_omap_vals(&self, object: &str) -> Result<OmapKeyValues> {
+        let operation = OmapGetVals {
+            start_after: None,
+            filter_prefix: None,
+            max_return: None,
+        };
+
+        let executor = ReadOpExecutor::new(self, operation)?;
+
+        executor.execute_async(object).await
     }
 }
 

@@ -2,9 +2,11 @@ use std::{ffi::CString, pin::Pin};
 
 use crate::{
     IoCtx, RadosError, Result,
+    aio::completion::RadosCompletion,
     error::maybe_err,
     librados::{
-        rados_create_read_op, rados_read_op_operate, rados_read_op_t, rados_release_read_op,
+        rados_aio_read_op_operate, rados_create_read_op, rados_read_op_operate, rados_read_op_t,
+        rados_release_read_op,
     },
 };
 
@@ -63,6 +65,33 @@ where
         };
 
         maybe_err(result)?;
+
+        T::complete(pinned)
+    }
+
+    pub async fn execute_async(self, object: &str) -> Result<T::Output> {
+        let object = CString::new(object).expect("Object ID had interior NUL");
+        let mut pinned = std::pin::pin!(T::OperationState::default());
+
+        self.operation
+            .construct(self.inner.get(), pinned.as_mut())?;
+
+        let read_op = self.inner.get();
+        let io = self.ioctx.inner();
+
+        let mut completion = unsafe {
+            RadosCompletion::new_with(false, object, |completion, object| {
+                maybe_err(rados_aio_read_op_operate(
+                    read_op,
+                    io,
+                    completion,
+                    object.as_ptr(),
+                    0,
+                ))
+            })?
+        };
+
+        core::future::poll_fn(|cx| completion.poll(cx)).await?;
 
         T::complete(pinned)
     }

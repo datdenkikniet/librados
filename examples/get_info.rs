@@ -26,9 +26,17 @@ async fn main() {
         );
     }
 
-    for (k, v) in ctx.get_omap_vals(&object).unwrap() {
-        let key = std::str::from_utf8(&k).unwrap();
+    let blocking_omap = ctx.get_omap_vals_blocking(&object).unwrap();
+    let async_omap = ctx.get_omap_vals(&object).await.unwrap();
 
-        println!("Found omap `{key}` of {} bytes.", v.len());
+    for ((k1, v1), (k2, v2)) in blocking_omap.zip(async_omap) {
+        let k1 = std::str::from_utf8(&k1).unwrap();
+        let k2 = std::str::from_utf8(&k2).unwrap();
+
+        // This works, because `OmapKeyValues` yields an ordered list.
+        assert_eq!(k1, k2);
+        assert_eq!(v1, v2);
+
+        println!("Found omap `{k1}` of {} bytes.", v1.len());
     }
 }

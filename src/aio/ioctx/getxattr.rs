@@ -1,6 +1,9 @@
 use std::{ffi::CString, pin::Pin, str::FromStr, task::Poll};
 
-use crate::{IoCtx, RadosError, aio::completion::RadosCompletion, librados::rados_aio_getxattr};
+use crate::{
+    IoCtx, RadosError, aio::completion::RadosCompletion, error::maybe_err,
+    librados::rados_aio_getxattr,
+};
 
 #[derive(Debug, Clone)]
 pub enum GetXAttrError {
@@ -40,7 +43,7 @@ struct GetXAttr<'io, 'rados, 'data> {
     name: &'data str,
     object: &'data str,
     buf_size: usize,
-    completion: Option<Option<RadosCompletion<Data>>>,
+    completion: Option<crate::Result<RadosCompletion<Data>>>,
 }
 
 impl<'io, 'rados, 'data> GetXAttr<'io, 'rados, 'data> {
@@ -78,21 +81,19 @@ impl Future for GetXAttr<'_, '_, '_> {
                     // SAFETY: the values passed to this function are
                     // all pointers to pinned values that are available
                     // for the lifetime of `self`, which is also
-                    let start = rados_aio_getxattr(
+                    maybe_err(rados_aio_getxattr(
                         ctx,
                         data.object.as_ptr(),
                         completion,
                         data.name.as_ptr(),
                         data.buf.as_mut_ptr() as _,
                         data.buf.len(),
-                    );
-
-                    start == 0
+                    ))
                 })
             }
         });
 
-        if let Some(completion) = completion {
+        if let Ok(completion) = completion {
             completion
                 .poll(cx)
                 .map_ok(|(len, data)| {
