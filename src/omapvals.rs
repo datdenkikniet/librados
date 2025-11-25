@@ -97,6 +97,13 @@ impl<'rados> IoCtx<'rados> {
     }
 }
 
+#[derive(Default)]
+pub struct State {
+    iter: rados_omap_iter_t,
+    more: bool,
+    status: i32,
+}
+
 pub struct OmapGetVals<'a> {
     start_after: Option<&'a CStr>,
     filter_prefix: Option<&'a CStr>,
@@ -104,7 +111,7 @@ pub struct OmapGetVals<'a> {
 }
 
 impl<'a> ReadOp for OmapGetVals<'a> {
-    type OperationState = (rados_omap_iter_t, bool, i32);
+    type OperationState = State;
 
     type Output = OmapKeyValues;
 
@@ -121,9 +128,9 @@ impl<'a> ReadOp for OmapGetVals<'a> {
                 self.start_after.map(|v| v.as_ptr()).unwrap_or(null()),
                 self.filter_prefix.map(|v| v.as_ptr()).unwrap_or(null()),
                 self.max_return.unwrap_or(u64::MAX),
-                &raw mut state.0,
-                &raw mut state.1 as _,
-                &raw mut state.2 as _,
+                &raw mut state.iter,
+                &raw mut state.more as _,
+                &raw mut state.status as _,
             )
         };
 
@@ -131,11 +138,11 @@ impl<'a> ReadOp for OmapGetVals<'a> {
     }
 
     fn complete(state: Pin<&mut Self::OperationState>) -> Result<Self::Output> {
-        maybe_err(state.2)?;
+        maybe_err(state.status)?;
 
-        assert!(!state.0.is_null());
+        assert!(!state.iter.is_null());
 
-        let res = unsafe { OmapKeyValues::new(state.0) };
+        let res = unsafe { OmapKeyValues::new(state.iter) };
         Ok(res)
     }
 }
