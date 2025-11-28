@@ -1,29 +1,11 @@
 use std::{ffi::CString, task::Poll};
 
 use crate::{
-    IoCtx, RadosError, aio::completion::RadosCompletion, error::maybe_err,
-    librados::rados_aio_getxattr,
+    IoCtx, Result, aio::completion::RadosCompletion, error::maybe_err, librados::rados_aio_getxattr,
 };
 
-#[derive(Debug, Clone)]
-pub enum GetXAttrError {
-    CreateCompletion,
-    Error(RadosError),
-}
-
-impl From<RadosError> for GetXAttrError {
-    fn from(value: RadosError) -> Self {
-        Self::Error(value)
-    }
-}
-
 impl IoCtx<'_> {
-    pub async fn get_xattr(
-        &self,
-        object: &str,
-        name: &str,
-        buf_size: usize,
-    ) -> Result<Vec<u8>, GetXAttrError> {
+    pub async fn get_xattr(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {
         let mut completion = None;
         let object = CString::new(object).expect("Object ID contained internal NUL");
         let name = CString::new(name).expect("Name contained internal NUL");
@@ -51,14 +33,11 @@ impl IoCtx<'_> {
             });
 
             match completion {
-                Ok(c) => c
-                    .poll(cx)
-                    .map_ok(|(len, mut buf)| {
-                        buf.truncate(len);
-                        buf
-                    })
-                    .map_err(GetXAttrError::Error),
-                Err(e) => Poll::Ready(Err(GetXAttrError::Error(e.clone()))),
+                Ok(c) => c.poll(cx).map_ok(|(len, mut buf)| {
+                    buf.truncate(len);
+                    buf
+                }),
+                Err(e) => Poll::Ready(Err(e.clone())),
             }
         })
         .await
