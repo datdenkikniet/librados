@@ -7,6 +7,7 @@ mod error;
 mod ioctx;
 mod omapvals;
 mod rados;
+mod read;
 mod read_op;
 mod stat;
 mod xattr;

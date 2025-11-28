@@ -1536,7 +1536,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn listen(__fd: ::std::os::raw::c_int, __n: ::std::os::raw::c_int)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn accept(
@@ -2054,7 +2054,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn getcwd(__buf: *mut ::std::os::raw::c_char, __size: usize)
-        -> *mut ::std::os::raw::c_char;
+    -> *mut ::std::os::raw::c_char;
 }
 unsafe extern "C" {
     pub fn getwd(__buf: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
@@ -2064,7 +2064,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn dup2(__fd: ::std::os::raw::c_int, __fd2: ::std::os::raw::c_int)
-        -> ::std::os::raw::c_int;
+    -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub static mut __environ: *mut *mut ::std::os::raw::c_char;
