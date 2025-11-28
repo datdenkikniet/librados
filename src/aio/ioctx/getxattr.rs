@@ -1,4 +1,4 @@
-use std::{ffi::CString, pin::Pin, str::FromStr, task::Poll};
+use std::{ffi::CString, task::Poll};
 
 use crate::{
     IoCtx, RadosError, aio::completion::RadosCompletion, error::maybe_err,
@@ -18,92 +18,49 @@ impl From<RadosError> for GetXAttrError {
 }
 
 impl IoCtx<'_> {
-    pub fn get_xattr<'io, 'data>(
-        &'io self,
-        object: &'data str,
-        name: &'data str,
+    pub async fn get_xattr(
+        &self,
+        object: &str,
+        name: &str,
         buf_size: usize,
-    ) -> impl Future<Output = Result<Vec<u8>, GetXAttrError>> + Send + 'io
-    where
-        'data: 'io,
-    {
-        GetXAttr::new(self, object, name, buf_size)
-    }
-}
+    ) -> Result<Vec<u8>, GetXAttrError> {
+        let mut completion = None;
+        let object = CString::new(object).expect("Object ID contained internal NUL");
+        let name = CString::new(name).expect("Name contained internal NUL");
 
-#[derive(Debug)]
-struct Data {
-    object: CString,
-    name: CString,
-    buf: Vec<u8>,
-}
+        core::future::poll_fn(|cx| {
+            let completion = completion.get_or_insert_with(|| {
+                let data_buf = vec![0u8; buf_size];
+                // SAFETY: the passed-in closure returns `true` if and only
+                // if creation of the async operation succeeds.
+                unsafe {
+                    RadosCompletion::new_with(false, data_buf, |completion, mut data_buf| {
+                        // SAFETY: the values passed to this function are
+                        // all pointers to pinned values that are available
+                        // for the lifetime of `self`, which is also
+                        maybe_err(rados_aio_getxattr(
+                            self.inner(),
+                            object.as_ptr(),
+                            completion,
+                            name.as_ptr(),
+                            data_buf.as_mut_ptr() as _,
+                            data_buf.len(),
+                        ))
+                    })
+                }
+            });
 
-struct GetXAttr<'io, 'rados, 'data> {
-    ctx: &'io IoCtx<'rados>,
-    name: &'data str,
-    object: &'data str,
-    buf_size: usize,
-    completion: Option<crate::Result<RadosCompletion<Data>>>,
-}
-
-impl<'io, 'rados, 'data> GetXAttr<'io, 'rados, 'data> {
-    fn new(io: &'io IoCtx<'rados>, object: &'data str, name: &'data str, buf_size: usize) -> Self {
-        Self {
-            ctx: io,
-            completion: None,
-            object,
-            name,
-            buf_size,
-        }
-    }
-}
-
-impl Future for GetXAttr<'_, '_, '_> {
-    type Output = Result<Vec<u8>, GetXAttrError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        let buf_size = self.buf_size;
-        let name = self.name;
-        let object = self.object;
-        let ctx = self.ctx.inner();
-
-        let completion = self.completion.get_or_insert_with(|| {
-            let data = Data {
-                buf: vec![0u8; buf_size],
-                name: CString::from_str(name).expect("XAttr name had internal NUL"),
-                object: CString::from_str(object).expect("Object name had internal NUL"),
-            };
-
-            // SAFETY: the passed-in closure returns `true` if and only
-            // if creation of the async operation succeeds.
-            unsafe {
-                RadosCompletion::new_with(false, data, |completion, mut data| {
-                    // SAFETY: the values passed to this function are
-                    // all pointers to pinned values that are available
-                    // for the lifetime of `self`, which is also
-                    maybe_err(rados_aio_getxattr(
-                        ctx,
-                        data.object.as_ptr(),
-                        completion,
-                        data.name.as_ptr(),
-                        data.buf.as_mut_ptr() as _,
-                        data.buf.len(),
-                    ))
-                })
+            match completion {
+                Ok(c) => c
+                    .poll(cx)
+                    .map_ok(|(len, mut buf)| {
+                        buf.truncate(len);
+                        buf
+                    })
+                    .map_err(GetXAttrError::Error),
+                Err(e) => Poll::Ready(Err(GetXAttrError::Error(e.clone()))),
             }
-        });
-
-        if let Ok(completion) = completion {
-            completion
-                .poll(cx)
-                .map_ok(|(len, data)| {
-                    let mut vec = data.buf;
-                    vec.truncate(len);
-                    vec
-                })
-                .map_err(GetXAttrError::Error)
-        } else {
-            return Poll::Ready(Err(GetXAttrError::CreateCompletion));
-        }
+        })
+        .await
     }
 }
