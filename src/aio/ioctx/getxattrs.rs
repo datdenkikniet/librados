@@ -1,8 +1,4 @@
-use std::{
-    ffi::CString,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::{ffi::CString, task::Poll};
 
 use crate::{
     ExtendedAttributes, IoCtx, Result,
@@ -12,63 +8,40 @@ use crate::{
 };
 
 impl<'rados> IoCtx<'rados> {
-    pub fn get_xattrs<'io, 's>(
-        &'io self,
-        object: &'s str,
-    ) -> impl Future<Output = Result<ExtendedAttributes>> + Send {
-        let object = CString::new(object).expect("Object name had interior NUL.");
-        GetXAttrs::new(self, object)
-    }
-}
+    pub async fn get_xattrs<'io, 's>(&'io self, object: &'s str) -> Result<ExtendedAttributes> {
+        let mut completion = None;
+        let oid = CString::new(object).expect("Object name had interior NUL.");
+        let io = self.inner();
 
-struct GetXAttrs<'io, 'rados> {
-    io: &'io IoCtx<'rados>,
-    object: CString,
-    completion: Option<crate::Result<RadosCompletion<rados_xattrs_iter_t>>>,
-}
+        core::future::poll_fn(|cx| {
+            let completion = completion.get_or_insert_with(|| unsafe {
+                RadosCompletion::new_with(
+                    false,
+                    rados_xattrs_iter_t::default(),
+                    |completion, mut iter| {
+                        maybe_err(rados_aio_getxattrs(
+                            io,
+                            oid.as_ptr(),
+                            completion,
+                            &raw mut *iter,
+                        ))
+                    },
+                )
+            });
 
-unsafe impl<'io, 'rados> Send for GetXAttrs<'io, 'rados> {}
+            match completion {
+                Ok(c) => c.poll(cx).map_ok(|(_, iterator)| {
+                    assert!(
+                        !iterator.is_null(),
+                        "Created iterator was null despite future returning Poll::Ready(Ok)"
+                    );
 
-impl<'io, 'rados> GetXAttrs<'io, 'rados> {
-    pub fn new(io: &'io IoCtx<'rados>, object: CString) -> Self {
-        Self {
-            io,
-            object,
-            completion: None,
-        }
-    }
-}
-
-impl<'io, 'rados> Future for GetXAttrs<'io, 'rados> {
-    type Output = Result<ExtendedAttributes>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let io = self.io.inner();
-
-        let oid = self.object.as_ptr();
-
-        let completion = self.completion.get_or_insert_with(|| unsafe {
-            RadosCompletion::new_with(
-                false,
-                rados_xattrs_iter_t::default(),
-                |completion, mut iter| {
-                    maybe_err(rados_aio_getxattrs(io, oid, completion, &raw mut *iter))
-                },
-            )
-        });
-
-        if let Ok(completion) = completion {
-            completion.poll(cx).map_ok(move |(_, iterator)| {
-                assert!(
-                    !iterator.is_null(),
-                    "Created iterator was null despite future returning Poll::Ready(Ok)"
-                );
-
-                // SAFETY: `iterator` is not null.
-                unsafe { ExtendedAttributes::new(iterator) }
-            })
-        } else {
-            Poll::Ready(Err(i32::MIN.into()))
-        }
+                    // SAFETY: `iterator` is not null.
+                    unsafe { ExtendedAttributes::new(iterator) }
+                }),
+                Err(e) => Poll::Ready(Err(e.clone())),
+            }
+        })
+        .await
     }
 }
