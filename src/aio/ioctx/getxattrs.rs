@@ -12,21 +12,23 @@ impl<'rados> IoCtx<'rados> {
         let mut completion = None;
         let oid = CString::new(object).expect("Object name had interior NUL.");
 
+        let create_completion = || unsafe {
+            RadosCompletion::new_with(
+                false,
+                rados_xattrs_iter_t::default(),
+                |completion, mut iter| {
+                    maybe_err(rados_aio_getxattrs(
+                        self.inner(),
+                        oid.as_ptr(),
+                        completion,
+                        &raw mut *iter,
+                    ))
+                },
+            )
+        };
+
         core::future::poll_fn(|cx| {
-            let completion = completion.get_or_insert_with(|| unsafe {
-                RadosCompletion::new_with(
-                    false,
-                    rados_xattrs_iter_t::default(),
-                    |completion, mut iter| {
-                        maybe_err(rados_aio_getxattrs(
-                            self.inner(),
-                            oid.as_ptr(),
-                            completion,
-                            &raw mut *iter,
-                        ))
-                    },
-                )
-            });
+            let completion = completion.get_or_insert_with(create_completion);
 
             match completion {
                 Ok(c) => c.poll(cx).map_ok(|(_, iterator)| {

@@ -76,25 +76,27 @@ where
     {
         let mut completion = None;
 
+        let create_completion = || unsafe {
+            let object = CString::new(object).expect("Object ID had interior NUL");
+            let state = T::OperationState::default();
+
+            RadosCompletion::new_with(false, (object, state), |completion, mut full_state| {
+                let pinned = &mut full_state.1;
+                let op_state = core::pin::Pin::new_unchecked(pinned);
+                self.operation.construct(self.inner.get(), op_state)?;
+
+                maybe_err(rados_aio_read_op_operate(
+                    self.inner.get(),
+                    self.ioctx.inner(),
+                    completion,
+                    full_state.0.as_ptr(),
+                    0,
+                ))
+            })
+        };
+
         let (_, (_, output)) = core::future::poll_fn(|cx| {
-            let completion = completion.get_or_insert_with(|| unsafe {
-                let object = CString::new(object).expect("Object ID had interior NUL");
-                let state = T::OperationState::default();
-
-                RadosCompletion::new_with(false, (object, state), |completion, mut full_state| {
-                    let pinned = &mut full_state.1;
-                    let op_state = core::pin::Pin::new_unchecked(pinned);
-                    self.operation.construct(self.inner.get(), op_state)?;
-
-                    maybe_err(rados_aio_read_op_operate(
-                        self.inner.get(),
-                        self.ioctx.inner(),
-                        completion,
-                        full_state.0.as_ptr(),
-                        0,
-                    ))
-                })
-            });
+            let completion = completion.get_or_insert_with(create_completion);
 
             let completion = match completion {
                 Ok(c) => c,
