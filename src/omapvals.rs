@@ -115,7 +115,7 @@ impl<'a> ReadOp for OmapGetVals<'a> {
 
     type Output = OmapKeyValues;
 
-    fn construct(
+    fn construct_in_place(
         &self,
         read_op: rados_read_op_t,
         mut state: Pin<&mut Self::OperationState>,

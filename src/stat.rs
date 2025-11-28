@@ -49,7 +49,7 @@ impl ReadOp for StatOp {
 
     type Output = Stat;
 
-    fn construct(
+    fn construct_in_place(
         &self,
         read_op: crate::librados::rados_read_op_t,
         mut state: std::pin::Pin<&mut Self::OperationState>,

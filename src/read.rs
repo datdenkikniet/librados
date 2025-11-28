@@ -27,7 +27,7 @@ impl ReadOp for ReadObject {
 
     type Output = Vec<u8>;
 
-    fn construct(
+    fn construct_in_place(
         &self,
         read_op: crate::librados::rados_read_op_t,
         mut state: std::pin::Pin<&mut Self::OperationState>,

@@ -59,7 +59,8 @@ where
 
         let pinned = unsafe { Pin::new_unchecked(&mut output) };
 
-        self.operation.construct(self.inner.get(), pinned)?;
+        self.operation
+            .construct_in_place(self.inner.get(), pinned)?;
 
         let result = unsafe {
             rados_read_op_operate(self.inner.get(), self.ioctx.inner(), object.as_ptr(), 0)
@@ -83,7 +84,8 @@ where
             RadosCompletion::new_with(false, (object, state), |completion, mut full_state| {
                 let pinned = &mut full_state.1;
                 let op_state = core::pin::Pin::new_unchecked(pinned);
-                self.operation.construct(self.inner.get(), op_state)?;
+                self.operation
+                    .construct_in_place(self.inner.get(), op_state)?;
 
                 maybe_err(rados_aio_read_op_operate(
                     self.inner.get(),
@@ -118,7 +120,7 @@ where
     type OperationState: Default;
     type Output;
 
-    fn construct(
+    fn construct_in_place(
         &self,
         read_op: rados_read_op_t,
         state: Pin<&mut Self::OperationState>,
