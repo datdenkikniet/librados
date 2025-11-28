@@ -50,7 +50,7 @@ impl ReadOp for StatOp {
     type Output = Stat;
 
     fn construct(
-        self,
+        &self,
         read_op: crate::librados::rados_read_op_t,
         mut state: std::pin::Pin<&mut Self::OperationState>,
     ) -> crate::Result<()> {
@@ -66,7 +66,7 @@ impl ReadOp for StatOp {
         Ok(())
     }
 
-    fn complete(state: std::pin::Pin<&mut Self::OperationState>) -> crate::Result<Self::Output> {
+    fn complete(state: Self::OperationState) -> crate::Result<Self::Output> {
         maybe_err(state.result)?;
 
         Ok(Stat {

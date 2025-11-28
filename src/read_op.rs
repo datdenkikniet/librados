@@ -55,10 +55,11 @@ where
 
     pub fn execute(self, object: &str) -> Result<T::Output> {
         let object = CString::new(object).expect("Object ID had interior NUL.");
-        let mut pinned = std::pin::pin!(T::OperationState::default());
+        let mut output = T::OperationState::default();
 
-        self.operation
-            .construct(self.inner.get(), pinned.as_mut())?;
+        let pinned = unsafe { Pin::new_unchecked(&mut output) };
+
+        self.operation.construct(self.inner.get(), pinned)?;
 
         let result = unsafe {
             rados_read_op_operate(self.inner.get(), self.ioctx.inner(), object.as_ptr(), 0)
@@ -66,29 +67,30 @@ where
 
         maybe_err(result)?;
 
-        T::complete(pinned)
+        T::complete(output)
     }
 
-    pub async fn execute_async(self, object: &str) -> Result<T::Output> {
-        let mut pinned = std::pin::pin!(T::OperationState::default());
-
-        self.operation
-            .construct(self.inner.get(), pinned.as_mut())?;
-
-        let read_op = self.inner.get();
-        let io = self.ioctx.inner();
-
+    pub async fn execute_async(self, object: &str) -> Result<T::Output>
+    where
+        T::OperationState: 'static + Unpin,
+    {
         let mut completion = None;
 
-        core::future::poll_fn(|cx| {
-            let completion = completion.get_or_insert_with(move || unsafe {
+        let (_, (_, output)) = core::future::poll_fn(|cx| {
+            let completion = completion.get_or_insert_with(|| unsafe {
                 let object = CString::new(object).expect("Object ID had interior NUL");
-                RadosCompletion::new_with(false, object, |completion, object| {
+                let state = T::OperationState::default();
+
+                RadosCompletion::new_with(false, (object, state), |completion, mut full_state| {
+                    let pinned = &mut full_state.1;
+                    let op_state = core::pin::Pin::new_unchecked(pinned);
+                    self.operation.construct(self.inner.get(), op_state)?;
+
                     maybe_err(rados_aio_read_op_operate(
-                        read_op,
-                        io,
+                        self.inner.get(),
+                        self.ioctx.inner(),
                         completion,
-                        object.as_ptr(),
+                        full_state.0.as_ptr(),
                         0,
                     ))
                 })
@@ -103,7 +105,7 @@ where
         })
         .await?;
 
-        T::complete(pinned)
+        T::complete(output)
     }
 }
 
@@ -115,10 +117,10 @@ where
     type Output;
 
     fn construct(
-        self,
+        &self,
         read_op: rados_read_op_t,
         state: Pin<&mut Self::OperationState>,
     ) -> Result<()>;
 
-    fn complete(state: Pin<&mut Self::OperationState>) -> Result<Self::Output>;
+    fn complete(state: Self::OperationState) -> Result<Self::Output>;
 }

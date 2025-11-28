@@ -26,7 +26,7 @@ unsafe impl<T> Send for RadosCompletion<T> {}
 
 impl<T> RadosCompletion<T>
 where
-    T: 'static + core::fmt::Debug,
+    T: 'static,
 {
     /// Create a new [`RadosCompletion`].
     ///
@@ -58,6 +58,10 @@ where
     /// Calling `f` _must only_ return `Err(_)` if creation of the underlying completion
     /// operation has failed. If `Err(_)` is returned, but the `complete` or `safe`
     /// callback of this [`RadosCompletion`] are called anyways, a double-free will occur.
+    ///
+    /// All of the data that the completion attached to this [`RadosCompletion`] stores
+    /// results in _must_ be part of `state`. Examples of such data are output buffers,
+    /// output lengths, and read/write operation return values.
     ///
     /// Always returning `Ok(())` is allowed and does not cause UB. However, it does
     /// cause memory to leak.
@@ -100,7 +104,7 @@ where
 
 impl<T> RadosCompletionInner<T>
 where
-    T: 'static + core::fmt::Debug,
+    T: 'static,
 {
     /// # Safety
     /// See [`RadosCompletion::new_with`].

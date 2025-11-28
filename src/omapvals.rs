@@ -116,7 +116,7 @@ impl<'a> ReadOp for OmapGetVals<'a> {
     type Output = OmapKeyValues;
 
     fn construct(
-        self,
+        &self,
         read_op: rados_read_op_t,
         mut state: Pin<&mut Self::OperationState>,
     ) -> Result<()> {
@@ -137,7 +137,7 @@ impl<'a> ReadOp for OmapGetVals<'a> {
         Ok(())
     }
 
-    fn complete(state: Pin<&mut Self::OperationState>) -> Result<Self::Output> {
+    fn complete(state: Self::OperationState) -> Result<Self::Output> {
         maybe_err(state.status)?;
 
         assert!(!state.iter.is_null());
