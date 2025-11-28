@@ -1,4 +1,4 @@
-use std::{ffi::CString, pin::Pin};
+use std::{ffi::CString, pin::Pin, task::Poll};
 
 use crate::{
     IoCtx, RadosError, Result,
@@ -70,7 +70,6 @@ where
     }
 
     pub async fn execute_async(self, object: &str) -> Result<T::Output> {
-        let object = CString::new(object).expect("Object ID had interior NUL");
         let mut pinned = std::pin::pin!(T::OperationState::default());
 
         self.operation
@@ -79,19 +78,30 @@ where
         let read_op = self.inner.get();
         let io = self.ioctx.inner();
 
-        let mut completion = unsafe {
-            RadosCompletion::new_with(false, object, |completion, object| {
-                maybe_err(rados_aio_read_op_operate(
-                    read_op,
-                    io,
-                    completion,
-                    object.as_ptr(),
-                    0,
-                ))
-            })?
-        };
+        let mut completion = None;
 
-        core::future::poll_fn(|cx| completion.poll(cx)).await?;
+        core::future::poll_fn(|cx| {
+            let completion = completion.get_or_insert_with(move || unsafe {
+                let object = CString::new(object).expect("Object ID had interior NUL");
+                RadosCompletion::new_with(false, object, |completion, object| {
+                    maybe_err(rados_aio_read_op_operate(
+                        read_op,
+                        io,
+                        completion,
+                        object.as_ptr(),
+                        0,
+                    ))
+                })
+            });
+
+            let completion = match completion {
+                Ok(c) => c,
+                Err(e) => return Poll::Ready(Err(e.clone())),
+            };
+
+            completion.poll(cx)
+        })
+        .await?;
 
         T::complete(pinned)
     }
