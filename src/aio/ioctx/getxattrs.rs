@@ -11,7 +11,6 @@ impl<'rados> IoCtx<'rados> {
     pub async fn get_xattrs<'io, 's>(&'io self, object: &'s str) -> Result<ExtendedAttributes> {
         let mut completion = None;
         let oid = CString::new(object).expect("Object name had interior NUL.");
-        let io = self.inner();
 
         core::future::poll_fn(|cx| {
             let completion = completion.get_or_insert_with(|| unsafe {
@@ -20,7 +19,7 @@ impl<'rados> IoCtx<'rados> {
                     rados_xattrs_iter_t::default(),
                     |completion, mut iter| {
                         maybe_err(rados_aio_getxattrs(
-                            io,
+                            self.inner(),
                             oid.as_ptr(),
                             completion,
                             &raw mut *iter,
