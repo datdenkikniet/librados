@@ -1,2 +1,0 @@
-mod getxattr;
-mod getxattrs;

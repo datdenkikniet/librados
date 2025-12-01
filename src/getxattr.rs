@@ -1,8 +1,6 @@
 use std::{ffi::CString, task::Poll};
 
-use crate::{
-    IoCtx, Result, aio::completion::RadosCompletion, error::maybe_err, librados::rados_aio_getxattr,
-};
+use crate::{IoCtx, RadosCompletion, Result, error::maybe_err, librados::rados_aio_getxattr};
 
 impl IoCtx<'_> {
     pub async fn get_xattr(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {

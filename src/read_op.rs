@@ -1,8 +1,7 @@
 use std::{ffi::CString, pin::Pin, task::Poll};
 
 use crate::{
-    IoCtx, RadosError, Result,
-    aio::completion::RadosCompletion,
+    IoCtx, RadosCompletion, RadosError, Result,
     error::maybe_err,
     librados::{
         rados_aio_read_op_operate, rados_create_read_op, rados_read_op_operate, rados_read_op_t,

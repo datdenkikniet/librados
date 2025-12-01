@@ -1,8 +1,7 @@
 use std::{ffi::CString, task::Poll};
 
 use crate::{
-    ExtendedAttributes, IoCtx, Result,
-    aio::completion::RadosCompletion,
+    ExtendedAttributes, IoCtx, RadosCompletion, Result,
     error::maybe_err,
     librados::{rados_aio_getxattrs, rados_xattrs_iter_t},
 };

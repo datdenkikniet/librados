@@ -1,9 +1,11 @@
 #[allow(warnings)]
 mod librados;
 
-mod aio;
 mod bytecount;
+pub(crate) mod completion;
 mod error;
+mod getxattr;
+mod getxattrs;
 mod ioctx;
 mod omapvals;
 mod rados;
@@ -13,6 +15,7 @@ mod stat;
 mod xattr;
 
 pub use bytecount::ByteCount;
+pub(crate) use completion::RadosCompletion;
 pub use error::{RadosError, Result};
 pub use ioctx::{IoCtx, PoolStats};
 pub use omapvals::OmapKeyValues;
