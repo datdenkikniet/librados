@@ -1,4 +1,4 @@
-use std::{ffi::CString, pin::Pin, task::Poll};
+use std::{ffi::CString, pin::Pin};
 
 use crate::{
     IoCtx, RadosCompletion, RadosError, Result,
@@ -74,15 +74,14 @@ where
     where
         T::OperationState: 'static + Unpin,
     {
-        let mut completion = None;
+        let object = CString::new(object).expect("Object ID had interior NUL");
+        let state = T::OperationState::default();
 
-        let create_completion = || unsafe {
-            let object = CString::new(object).expect("Object ID had interior NUL");
-            let state = T::OperationState::default();
-
+        let completion = unsafe {
             RadosCompletion::new_with(false, (object, state), |completion, mut full_state| {
                 let pinned = &mut full_state.1;
                 let op_state = core::pin::Pin::new_unchecked(pinned);
+
                 self.operation
                     .construct_in_place(self.inner.get(), op_state)?;
 
@@ -93,20 +92,10 @@ where
                     full_state.0.as_ptr(),
                     0,
                 ))
-            })
+            })?
         };
 
-        let (_, (_, output)) = core::future::poll_fn(|cx| {
-            let completion = completion.get_or_insert_with(create_completion);
-
-            let completion = match completion {
-                Ok(c) => c,
-                Err(e) => return Poll::Ready(Err(e.clone())),
-            };
-
-            completion.poll(cx)
-        })
-        .await?;
+        let (_, (_, output)) = completion.wait_for().await?;
 
         T::complete(output)
     }

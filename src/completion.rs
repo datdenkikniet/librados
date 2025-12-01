@@ -15,18 +15,21 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct RadosCompletion<T>
+pub struct RadosCompletion<T, F>
 where
     T: 'static,
 {
-    inner: RadosCompletionInner<T>,
+    f: F,
+    resolve_on_safe: bool,
+    state: T,
 }
 
-unsafe impl<T> Send for RadosCompletion<T> {}
+unsafe impl<T, F> Send for RadosCompletion<T, F> {}
 
-impl<T> RadosCompletion<T>
+impl<T, F> RadosCompletion<T, F>
 where
     T: 'static,
+    F: FnOnce(rados_completion_t, Pin<&mut T>) -> Result<()>,
 {
     /// Create a new [`RadosCompletion`].
     ///
@@ -59,36 +62,56 @@ where
     /// operation has failed. If `Err(_)` is returned, but the `complete` or `safe`
     /// callback of this [`RadosCompletion`] are called anyways, a double-free will occur.
     ///
+    /// Always returning `Ok(())` is allowed and does not cause UB. However, it does
+    /// cause memory to leak.
+    ///
+    /// ## State ownership
     /// All of the data that the completion attached to this [`RadosCompletion`] stores
     /// results in _must_ be part of `state`. Examples of such data are output buffers,
     /// output lengths, and read/write operation return values.
     ///
-    /// Always returning `Ok(())` is allowed and does not cause UB. However, it does
-    /// cause memory to leak.
+    /// This restriction applies because there is no easy way to directly cancel the
+    /// underlying completion and to guarantee that it stops modifying buffers immediately.
+    ///
+    /// TODO: this section is probably untrue
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
-    pub unsafe fn new_with<F>(resolve_on_safe: bool, state: T, f: F) -> Result<Self>
-    where
-        F: FnOnce(rados_completion_t, Pin<&mut T>) -> Result<()>,
-    {
+    pub unsafe fn new_with(resolve_on_safe: bool, state: T, f: F) -> Result<Self> {
         Ok(Self {
-            // SAFETY: `RadosCompletion::new_with` has the same safety requirements
-            // as `RadosCompletionInner::new_with`.
-            inner: unsafe { RadosCompletionInner::new_with(resolve_on_safe, state, f)? },
+            f,
+            resolve_on_safe,
+            state,
         })
     }
 
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<(usize, T)>> {
-        match self.inner.poll(cx) {
-            Poll::Ready((res, state)) => {
-                if let Ok(data) = usize::try_from(res) {
-                    Poll::Ready(Ok((data, state)))
-                } else {
-                    Poll::Ready(Err(res.into()))
-                }
+    pub async fn wait_for(self) -> Result<(usize, T)> {
+        let mut completion = None;
+
+        let mut create_completion = Some(|| unsafe {
+            RadosCompletionInner::new_with(self.resolve_on_safe, self.state, self.f)
+        });
+
+        core::future::poll_fn(|cx| {
+            let completion = completion.get_or_insert_with(|| {
+                let create = create_completion
+                    .take()
+                    .expect("Tried to construct completion multiple times");
+
+                create()
+            });
+
+            match completion {
+                Ok(v) => v.poll(cx).map(|(res, state)| {
+                    if let Ok(len) = usize::try_from(res) {
+                        Ok((len, state))
+                    } else {
+                        Err(res.into())
+                    }
+                }),
+                Err(e) => Poll::Ready(Err(e.clone())),
             }
-            Poll::Pending => Poll::Pending,
-        }
+        })
+        .await
     }
 }
 
