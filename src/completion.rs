@@ -184,7 +184,7 @@ where
 
         let start = f(completion, generic_state);
 
-        if start.is_err() {
+        if let Err(e) = start {
             // Creation of completion operation failed, so the wake-and-drop
             // callback will never be called.
             //
@@ -194,6 +194,7 @@ where
             // `Box::into_raw`, and `from_raw` is called exactly once
             // for the pointer.
             drop(unsafe { Box::from_raw(state) });
+            return Err(e);
         }
 
         Ok(Self {
