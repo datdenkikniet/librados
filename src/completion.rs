@@ -52,11 +52,6 @@ where
     ///
     /// For more information about the respective callbacks, see: [`rados_aio_create_completion`][0]
     ///
-    /// > **Note**: this function should only be called _during_ a `poll` operation. Since it creates and kicks off
-    /// a completion immediately. Setting it up during the creation of a [`Future`] is semantically incorrect, as
-    /// [`Future`]s should be lazy. That is also the reason that this struct does
-    /// not implement [`Future`].
-    ///
     /// # Safety
     /// Calling `f` _must only_ return `Err(_)` if creation of the underlying completion
     /// operation has failed. If `Err(_)` is returned, but the `complete` or `safe`
@@ -73,7 +68,8 @@ where
     /// This restriction applies because there is no easy way to directly cancel the
     /// underlying completion and to guarantee that it stops modifying buffers immediately.
     ///
-    /// TODO: this section is probably untrue
+    /// TODO: this section is probably untrue. We can likely `wait_for_complete_and_cb`
+    /// in `Drop`. Doing that will make misusing this a lot harder.
     ///
     /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_aio_create_completion
     pub unsafe fn new_with(resolve_on_safe: bool, state: T, f: F) -> Result<Self> {
