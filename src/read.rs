@@ -32,13 +32,13 @@ impl ReadOp for ReadObject {
         read_op: crate::librados::rados_read_op_t,
         mut state: std::pin::Pin<&mut Self::OperationState>,
     ) -> Result<()> {
-        state.2 = vec![0u8; self.bytes];
+        state.2 = Vec::with_capacity(self.bytes);
 
         unsafe {
             rados_read_op_read(
                 read_op,
                 self.offset as _,
-                state.2.len(),
+                state.2.capacity(),
                 state.2.as_mut_ptr() as _,
                 &raw mut state.1,
                 &raw mut state.0,
@@ -53,7 +53,10 @@ impl ReadOp for ReadObject {
 
         maybe_err(res)?;
 
-        buf.truncate(len);
+        assert!(len <= buf.capacity());
+        // SAFETY: `len` elements of `buf` are initialized
+        // after a succesful operation.
+        unsafe { buf.set_len(len) };
         Ok(buf)
     }
 }
