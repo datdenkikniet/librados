@@ -2,7 +2,7 @@ pub type Result<T> = std::result::Result<T, RadosError>;
 
 #[must_use]
 pub fn maybe_err(value: i32) -> Result<()> {
-    (value > 0).then_some(()).ok_or(value.into())
+    (value >= 0).then_some(()).ok_or(value.into())
 }
 
 #[derive(Debug, Clone, PartialEq)]
