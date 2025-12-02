@@ -7,9 +7,14 @@ async fn main() {
     let pool = args.nth(1).expect("pool as 1st argument");
     let object = args.next().expect("Object as 2nd argument");
 
+    println!("Finding info for object {}", object);
+
     let config = RadosConfig::default();
     let mut rados = Rados::connect(&config).unwrap();
     let ctx = IoCtx::new(&mut rados, &pool).unwrap();
+
+    let stats = ctx.stat(&object).await.unwrap();
+    println!("File stats: {stats:?}");
 
     println!("Getting xattr iterator");
     let mut attrs = ctx.get_xattrs(&object).await.unwrap();
