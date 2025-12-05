@@ -42,12 +42,6 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
         Self { io, start, end }
     }
 
-    /// Check whether there are more objects available from
-    /// this cursor.
-    pub fn has_more(&self) -> bool {
-        !self.start.is_end()
-    }
-
     /// Reset this cursor to the start of the pool,
     /// causing all previously yielded items to be
     /// yielded again.
@@ -200,6 +194,7 @@ mod cursor {
             Self { io, inner }
         }
 
+        #[allow(unused)]
         pub fn is_end(&self) -> bool {
             let res = unsafe { rados_object_list_is_end(self.io.inner(), self.inner) };
 
