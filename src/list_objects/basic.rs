@@ -1,42 +1,73 @@
 use std::marker::PhantomData;
 
 use crate::{
-    IoCtx, RadosError, Result,
+    IoCtx, Object, RadosError, Result,
     error::maybe_err,
     librados::{
         rados_list_ctx_t, rados_nobjects_list_close, rados_nobjects_list_get_pg_hash_position,
         rados_nobjects_list_next2, rados_nobjects_list_open, rados_nobjects_list_seek,
+        rados_object_list_item,
     },
 };
 
+pub struct OwnedObject {
+    oid: Vec<u8>,
+    locator: Vec<u8>,
+    nspace: Vec<u8>,
+}
+
+impl OwnedObject {
+    pub fn raw_oid(&self) -> &[u8] {
+        &self.oid
+    }
+
+    pub fn oid(&self) -> &str {
+        std::str::from_utf8(self.raw_oid()).expect("OID was not valid UTF-8")
+    }
+
+    pub fn raw_nspace(&self) -> &[u8] {
+        &self.nspace
+    }
+
+    pub fn nspace(&self) -> &str {
+        std::str::from_utf8(self.raw_nspace()).expect("Nspace was not valid UTF-8")
+    }
+
+    pub fn raw_locator(&self) -> &[u8] {
+        &self.locator
+    }
+
+    pub fn locator(&self) -> &str {
+        std::str::from_utf8(self.raw_locator()).expect("Locator was not valid UTF-8")
+    }
+
+    pub fn into_parts(self) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        (self.oid, self.locator, self.nspace)
+    }
+}
+
 impl<'rados> IoCtx<'rados> {
-    pub fn list_objects<'ioctx>(&'ioctx self) -> Result<BasicList<'ioctx, 'rados>> {
+    pub fn list_objects<'ioctx>(&'ioctx self) -> Result<List<'ioctx, 'rados>> {
         let mut list = std::ptr::null_mut();
 
         maybe_err(unsafe { rados_nobjects_list_open(self.inner(), &mut list) })?;
 
-        Ok(BasicList {
+        Ok(List {
             inner: list,
             _phantom: Default::default(),
         })
     }
 }
 
-pub struct Entry<T> {
-    pub entry: T,
-    pub key: T,
-    pub nspace: T,
-}
-
-pub struct BasicList<'ioctx, 'rados> {
+pub struct List<'ioctx, 'rados> {
     inner: rados_list_ctx_t,
     _phantom: PhantomData<&'ioctx IoCtx<'rados>>,
 }
 
-unsafe impl Send for BasicList<'_, '_> {}
-unsafe impl Sync for BasicList<'_, '_> {}
+unsafe impl Send for List<'_, '_> {}
+unsafe impl Sync for List<'_, '_> {}
 
-impl<'ioctx, 'rados> BasicList<'ioctx, 'rados> {
+impl<'ioctx, 'rados> List<'ioctx, 'rados> {
     pub fn get_pg_hash_position(&self) -> u32 {
         unsafe { rados_nobjects_list_get_pg_hash_position(self.inner) }
     }
@@ -45,49 +76,42 @@ impl<'ioctx, 'rados> BasicList<'ioctx, 'rados> {
         unsafe { rados_nobjects_list_seek(self.inner, pos) }
     }
 
-    pub fn try_next(&mut self) -> Result<Option<Entry<&str>>> {
-        let Entry { entry, key, nspace } = match self.try_next2()? {
-            Some(v) => v,
-            None => return Ok(None),
-        };
+    pub fn try_next(&mut self) -> Result<Option<Object<'_>>> {
+        let mut oid = std::ptr::null();
+        let mut oid_length = 0;
 
-        let entry = std::str::from_utf8(entry).expect("Entry was not a valid UTF-8 string");
-        let key = std::str::from_utf8(key).expect("Entry was not a valid UTF-8 string");
-        let nspace = std::str::from_utf8(nspace).expect("Entry was not a valid UTF-8 string");
-
-        Ok(Some(Entry { entry, key, nspace }))
-    }
-
-    pub fn try_next2(&mut self) -> Result<Option<Entry<&[u8]>>> {
-        let mut entry = std::ptr::null();
-        let mut entry_len = 0;
-
-        let mut key = std::ptr::null();
-        let mut key_len = 0;
+        let mut locator = std::ptr::null();
+        let mut locator_length = 0;
 
         let mut nspace = std::ptr::null();
-        let mut nspace_len = 0;
+        let mut nspace_length = 0;
 
         let res = unsafe {
             rados_nobjects_list_next2(
                 self.inner,
-                &mut entry,
-                &mut key,
+                &mut oid,
+                &mut locator,
                 &mut nspace,
-                &mut entry_len,
-                &mut key_len,
-                &mut nspace_len,
+                &mut oid_length,
+                &mut locator_length,
+                &mut nspace_length,
             )
         };
 
         if res == 0 {
-            use core::slice::from_raw_parts;
+            let object = rados_object_list_item {
+                oid_length,
+                oid: oid as _,
+                nspace_length,
+                nspace: nspace as _,
+                locator_length,
+                locator: locator as _,
+            };
 
-            let entry = unsafe { from_raw_parts(entry as *const u8, entry_len as _) };
-            let key = unsafe { from_raw_parts(key as *const u8, key_len as _) };
-            let nspace = unsafe { from_raw_parts(nspace as *const u8, nspace_len as _) };
-
-            Ok(Some(Entry { entry, key, nspace }))
+            Ok(Some(Object {
+                value: object,
+                _phantom: Default::default(),
+            }))
         } else {
             let err = RadosError::from(res);
 
@@ -100,21 +124,21 @@ impl<'ioctx, 'rados> BasicList<'ioctx, 'rados> {
     }
 }
 
-impl Iterator for BasicList<'_, '_> {
-    type Item = Entry<String>;
+impl Iterator for List<'_, '_> {
+    type Item = OwnedObject;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.try_next().ok().flatten()?;
 
-        Some(Entry {
-            entry: next.entry.into(),
-            key: next.key.to_string(),
-            nspace: next.nspace.to_string(),
+        Some(OwnedObject {
+            oid: next.raw_oid().to_vec(),
+            locator: next.raw_locator().to_vec(),
+            nspace: next.raw_nspace().to_vec(),
         })
     }
 }
 
-impl Drop for BasicList<'_, '_> {
+impl Drop for List<'_, '_> {
     fn drop(&mut self) {
         unsafe { rados_nobjects_list_close(self.inner) };
     }

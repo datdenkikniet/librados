@@ -30,6 +30,7 @@ pub enum Namespace {
     All,
 }
 
+#[derive(Debug)]
 pub struct IoCtx<'rados> {
     inner: rados_ioctx_t,
     _rados: PhantomData<&'rados mut rados_t>,

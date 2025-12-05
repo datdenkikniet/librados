@@ -45,14 +45,43 @@ async fn main() {
         println!("Found omap `{k1}` of {} bytes.", v1.len());
     }
 
-    println!("Getting all objects");
+    println!("Getting objects using list");
 
     let objects = ctx.list_objects().unwrap();
 
-    for entry in objects {
+    for object in objects.take(10) {
         println!(
-            "Entry: {}, Key: {}, Nspace: {}",
-            entry.entry, entry.key, entry.nspace
+            "Oid: {}, Locator: {}, Nspace: {}",
+            object.oid(),
+            object.locator(),
+            object.nspace()
+        );
+    }
+
+    println!("Getting objects using cursor");
+    let mut cursor = ctx.object_cursor();
+
+    let objects1 = cursor.read(10).unwrap();
+
+    for object in objects1.iter() {
+        println!(
+            "Oid: {:?}, Locator: {:?}, Nspace: {:?}",
+            object.oid(),
+            object.locator(),
+            object.nspace()
+        );
+    }
+
+    println!("Getting additional objects from the same cursor");
+
+    let objects = cursor.read(10).unwrap();
+
+    for object in &objects {
+        println!(
+            "Oid: {:?}, Locator: {:?}, Nspace: {:?}",
+            object.oid(),
+            object.locator(),
+            object.nspace()
         );
     }
 }
