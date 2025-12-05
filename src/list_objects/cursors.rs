@@ -6,11 +6,14 @@ use crate::{
 };
 
 impl IoCtx<'_> {
+    /// Create a cursor that will yield all objects in the pool and
+    /// namespace configured on this [`IoCtx`].
     pub fn object_cursor(&self) -> Cursor<'_, '_> {
         Cursor::new(self)
     }
 }
 
+/// An object cursor.
 #[derive(Debug)]
 pub struct Cursor<'ioctx, 'rados> {
     io: &'ioctx IoCtx<'rados>,
@@ -33,17 +36,23 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
         Self { io, start, end }
     }
 
+    /// Check whether there are more objects available from
+    /// this cursor.
     pub fn has_more(&self) -> bool {
         !self.start.is_end()
     }
 
+    /// Reset this cursor to the start of the pool,
+    /// causing all previously yielded items to be
+    /// yielded again.
     pub fn reset(&mut self) {
         self.start = ListCursor::begin(self.io);
     }
 
-    /// Read the next `n` entries.
+    /// Attempt to read the next `n` entries into a [`Vec`] and advance
+    /// the underlying cursor past the read objects.
     ///
-    /// May return less than `n` entries if the end of the pool has
+    /// May return fewer than `n` entries if the end of the pool has
     /// been reached.
     pub fn read<'me>(&'me mut self, n: usize) -> Result<Vec<Object<'me>>> {
         let mut results: Vec<Object> = Vec::with_capacity(n);
@@ -53,12 +62,30 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
         Ok(results)
     }
 
-    /// Read up to `list.capacity()` entries into `list`.
+    /// Read up to `results.capacity()` entries into `results` and
+    /// advance the underlying cursor past the read objects.
+    ///
+    /// Once this function returns, `results` will contain the read
+    /// objects. If fewer than `results.capacity()` objects were left
+    /// for reading, the amount of values contained in `results` will
+    /// be reduced.
     ///
     /// Note that the allocations performed by the program itself
-    /// are minimal: using `read_into` will only have performance
-    /// benefits on reads of very large sizes.
+    /// are relatively small: using `read_into` will only have minor
+    /// performance benefits over [`Cursor::read`].
+    ///
+    //
+    // Implementation note: this cannot take `&mut [Object]` because
+    // `Object` is not externally constructable (yet). `rados_object_list`
+    // zeroes out all of the values in `results` which could cause null-ptrs to be
+    // contained in some of the resulting `Object`s, which we _really_ don't want
+    // to expose to end users. This is just a slightly easier approach for now.
     pub fn read_into<'me>(&'me mut self, results: &mut Vec<Object<'me>>) -> Result<()> {
+        // Truncate to ensure that all items in the
+        // list are dropped (even though they shouldn't
+        // really need it)
+        results.truncate(0);
+
         let mut next = ListCursor::begin(self.io);
 
         let result_count = maybe_err_or_val(unsafe {
@@ -81,9 +108,9 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
         Ok(())
     }
 
-    /// Split this cursor into `chunks` cursors, each producing a slice
-    /// a fraction close to `1/chunks` of all objects that would have
-    /// been yielded by `self`.
+    /// Split this cursor into `chunks` cursors, each representing a slice
+    /// whose size is a fraction close to `1/chunks` of all objects in the
+    /// yielded that will eventually be yielded by `self`.
     pub fn split(&self, chunks: usize) -> impl Iterator<Item = Cursor<'ioctx, 'rados>> {
         struct Iter<'cur, 'ioctx, 'rados> {
             inner: &'cur Cursor<'ioctx, 'rados>,

@@ -30,6 +30,9 @@ pub enum Namespace {
     All,
 }
 
+/// A rados IO-context.
+///
+/// This struct contains common settings for interacting with a cluster.
 #[derive(Debug)]
 pub struct IoCtx<'rados> {
     inner: rados_ioctx_t,
