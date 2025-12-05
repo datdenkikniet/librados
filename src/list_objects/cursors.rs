@@ -157,6 +157,8 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
                     end: split_finish,
                 };
 
+                self.n += 1;
+
                 Some(new)
             }
         }
