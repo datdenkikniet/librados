@@ -5,6 +5,11 @@ pub fn maybe_err(value: i32) -> Result<()> {
     (value >= 0).then_some(()).ok_or(value.into())
 }
 
+#[must_use]
+pub fn maybe_err_or_val(value: i32) -> Result<u32> {
+    u32::try_from(value).map_err(|_| value.into())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RadosError {
     Noent,

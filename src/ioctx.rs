@@ -17,12 +17,18 @@ use std::{ffi::CString, marker::PhantomData, mem::MaybeUninit};
 
 use crate::{
     ByteCount, Rados, Result,
-    error::maybe_err,
+    error::{maybe_err, maybe_err_or_val},
     librados::{
-        rados_ioctx_create, rados_ioctx_destroy, rados_ioctx_pool_stat, rados_ioctx_t,
-        rados_pool_stat_t, rados_t,
+        LIBRADOS_ALL_NSPACES, rados_ioctx_create, rados_ioctx_destroy, rados_ioctx_get_namespace,
+        rados_ioctx_pool_stat, rados_ioctx_set_namespace, rados_ioctx_t, rados_pool_stat_t,
+        rados_t,
     },
 };
+
+pub enum Namespace {
+    Named(String),
+    All,
+}
 
 pub struct IoCtx<'rados> {
     inner: rados_ioctx_t,
@@ -50,6 +56,34 @@ impl<'rados> IoCtx<'rados> {
         maybe_err(unsafe { rados_ioctx_pool_stat(self.inner, stat.as_mut_ptr()) })?;
         let stat = unsafe { stat.assume_init() };
         Ok(stat.into())
+    }
+
+    pub fn set_namespace(&mut self, ns: &Namespace) {
+        let ns = match ns {
+            Namespace::Named(n) => {
+                CString::new(n.as_str()).expect("Namespace contained interior NUL")
+            }
+            Namespace::All => CString::from_vec_with_nul(LIBRADOS_ALL_NSPACES.to_vec()).unwrap(),
+        };
+
+        unsafe { rados_ioctx_set_namespace(self.inner, ns.as_ptr()) };
+    }
+
+    pub fn get_namespace(&self, max_len: usize) -> Result<Namespace> {
+        let mut str = Vec::with_capacity(max_len);
+
+        let len = maybe_err_or_val(unsafe {
+            rados_ioctx_get_namespace(self.inner, str.as_mut_ptr() as _, str.capacity() as _)
+        })?;
+
+        unsafe { str.set_len(len as _) };
+
+        if str == LIBRADOS_ALL_NSPACES {
+            Ok(Namespace::All)
+        } else {
+            let ns = String::from_utf8(str).expect("Namespace is not valid UTF8");
+            Ok(Namespace::Named(ns))
+        }
     }
 
     pub(crate) fn inner(&self) -> rados_ioctx_t {

@@ -44,4 +44,15 @@ async fn main() {
 
         println!("Found omap `{k1}` of {} bytes.", v1.len());
     }
+
+    println!("Getting all objects");
+
+    let objects = ctx.list_objects().unwrap();
+
+    for entry in objects {
+        println!(
+            "Entry: {}, Key: {}, Nspace: {}",
+            entry.entry, entry.key, entry.nspace
+        );
+    }
 }

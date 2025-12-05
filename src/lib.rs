@@ -7,6 +7,7 @@ mod error;
 mod getxattr;
 mod getxattrs;
 mod ioctx;
+mod list_objects;
 mod omapvals;
 mod rados;
 mod read;
