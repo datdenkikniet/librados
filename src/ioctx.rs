@@ -25,6 +25,7 @@ use crate::{
     },
 };
 
+#[derive(Clone, Debug)]
 pub enum Namespace {
     Named(String),
     All,

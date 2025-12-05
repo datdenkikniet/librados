@@ -18,7 +18,7 @@ mod xattr;
 pub use bytecount::ByteCount;
 pub(crate) use completion::RadosCompletion;
 pub use error::{RadosError, Result};
-pub use ioctx::{IoCtx, PoolStats};
+pub use ioctx::{IoCtx, Namespace, PoolStats};
 pub use list_objects::{Cursor, List, Object};
 pub use omapvals::OmapKeyValues;
 pub use rados::{ClusterStats, Rados, RadosConfig};

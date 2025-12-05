@@ -47,6 +47,11 @@ impl OwnedObject {
 }
 
 impl<'rados> IoCtx<'rados> {
+    /// Create a list that will yield all objects in the pool and
+    /// namespace configured on this [`IoCtx`].
+    ///
+    /// Note that filtering based on the namespace occurs synchronously,
+    /// so yielding from the returned [`List`] may take a long time.
     pub fn list_objects<'ioctx>(&'ioctx self) -> Result<List<'ioctx, 'rados>> {
         let mut list = std::ptr::null_mut();
 
@@ -59,6 +64,10 @@ impl<'rados> IoCtx<'rados> {
     }
 }
 
+/// A list of objects in a pool.
+///
+/// Objects yielded by this cursor are synchronously filtered
+/// by the namespace configured on the passed-in [`IoCtx`].
 pub struct List<'ioctx, 'rados> {
     inner: rados_list_ctx_t,
     _phantom: PhantomData<&'ioctx IoCtx<'rados>>,

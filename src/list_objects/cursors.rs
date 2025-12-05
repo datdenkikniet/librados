@@ -8,12 +8,18 @@ use crate::{
 impl IoCtx<'_> {
     /// Create a cursor that will yield all objects in the pool and
     /// namespace configured on this [`IoCtx`].
+    ///
+    /// Note that filtering based on the namespace occurs synchronously,
+    /// so yielding from the returned [`Cursor`] may take a long time.
     pub fn object_cursor(&self) -> Cursor<'_, '_> {
         Cursor::new(self)
     }
 }
 
 /// An object cursor.
+///
+/// Objects yielded by this cursor are synchronously filtered
+/// by the namespace configured on the passed-in [`IoCtx`].
 #[derive(Debug)]
 pub struct Cursor<'ioctx, 'rados> {
     io: &'ioctx IoCtx<'rados>,
@@ -109,8 +115,8 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
     }
 
     /// Split this cursor into `chunks` cursors, each representing a slice
-    /// whose size is a fraction close to `1/chunks` of all objects in the
-    /// yielded that will eventually be yielded by `self`.
+    /// whose size is a fraction close to `1/chunks` of all objects
+    /// that will eventually be yielded by `self`.
     pub fn split(&self, chunks: usize) -> impl Iterator<Item = Cursor<'ioctx, 'rados>> {
         struct Iter<'cur, 'ioctx, 'rados> {
             inner: &'cur Cursor<'ioctx, 'rados>,
