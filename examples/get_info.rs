@@ -65,7 +65,7 @@ async fn main() {
 
     for object in objects1.iter() {
         println!(
-            "Oid: {:?}, Locator: {:?}, Nspace: {:?}",
+            "Oid: {}, Locator: {}, Nspace: {}",
             object.oid(),
             object.locator(),
             object.nspace()
@@ -78,7 +78,7 @@ async fn main() {
 
     for object in &objects {
         println!(
-            "Oid: {:?}, Locator: {:?}, Nspace: {:?}",
+            "Oid: {}, Locator: {}, Nspace: {}",
             object.oid(),
             object.locator(),
             object.nspace()
