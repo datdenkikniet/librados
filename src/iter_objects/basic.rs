@@ -1,82 +1,54 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, u32};
 
 use crate::{
-    IoCtx, Object, RadosError, Result,
+    IoCtx, RadosError, RefObject, Result,
     error::maybe_err,
+    iter_objects::OwnedObject,
     librados::{
         rados_list_ctx_t, rados_nobjects_list_close, rados_nobjects_list_get_pg_hash_position,
         rados_nobjects_list_next2, rados_nobjects_list_open, rados_nobjects_list_seek,
-        rados_object_list_item,
     },
 };
 
-pub struct OwnedObject {
-    oid: Vec<u8>,
-    locator: Vec<u8>,
-    nspace: Vec<u8>,
-}
-
-impl OwnedObject {
-    pub fn raw_oid(&self) -> &[u8] {
-        &self.oid
-    }
-
-    pub fn oid(&self) -> &str {
-        std::str::from_utf8(self.raw_oid()).expect("OID was not valid UTF-8")
-    }
-
-    pub fn raw_nspace(&self) -> &[u8] {
-        &self.nspace
-    }
-
-    pub fn nspace(&self) -> &str {
-        std::str::from_utf8(self.raw_nspace()).expect("Nspace was not valid UTF-8")
-    }
-
-    pub fn raw_locator(&self) -> &[u8] {
-        &self.locator
-    }
-
-    pub fn locator(&self) -> &str {
-        std::str::from_utf8(self.raw_locator()).expect("Locator was not valid UTF-8")
-    }
-
-    pub fn into_parts(self) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-        (self.oid, self.locator, self.nspace)
-    }
-}
-
 impl<'rados> IoCtx<'rados> {
-    /// Create a list that will yield all objects in the pool and
+    /// Create an iterator that will yield all objects in the pool and
     /// namespace configured on this [`IoCtx`].
     ///
     /// Note that filtering based on the namespace occurs synchronously,
     /// so yielding from the returned [`List`] may take a long time.
-    pub fn list_objects<'ioctx>(&'ioctx self) -> Result<List<'ioctx, 'rados>> {
+    ///
+    /// For more advanced use cases such as efficient subslicing of
+    /// all objects, a [`Cursor`][0] can be used instead (see:
+    /// [`IoCtx::object_cursor`]).
+    ///
+    /// [0]: super::Cursor
+    pub fn objects<'ioctx>(&'ioctx self) -> Result<ObjectsIterator<'ioctx, 'rados>> {
         let mut list = std::ptr::null_mut();
 
         maybe_err(unsafe { rados_nobjects_list_open(self.inner(), &mut list) })?;
 
-        Ok(List {
+        Ok(ObjectsIterator {
             inner: list,
             _phantom: Default::default(),
         })
     }
 }
 
-/// A list of objects in a pool.
+/// An iterator yielding objects in a pool.
+///
+/// This struct is created by calling [`IoCtx::objects`].
 ///
 /// Objects yielded by this cursor are synchronously filtered
 /// by the namespace configured on the passed-in [`IoCtx`].
-pub struct List<'ioctx, 'rados> {
+pub struct ObjectsIterator<'ioctx, 'rados> {
     inner: rados_list_ctx_t,
     _phantom: PhantomData<&'ioctx IoCtx<'rados>>,
 }
 
-unsafe impl Send for List<'_, '_> {}
-unsafe impl Sync for List<'_, '_> {}
+unsafe impl Send for ObjectsIterator<'_, '_> {}
+unsafe impl Sync for ObjectsIterator<'_, '_> {}
 
-impl<'ioctx, 'rados> List<'ioctx, 'rados> {
+impl<'ioctx, 'rados> ObjectsIterator<'ioctx, 'rados> {
     pub fn get_pg_hash_position(&self) -> u32 {
         unsafe { rados_nobjects_list_get_pg_hash_position(self.inner) }
     }
@@ -85,7 +57,7 @@ impl<'ioctx, 'rados> List<'ioctx, 'rados> {
         unsafe { rados_nobjects_list_seek(self.inner, pos) }
     }
 
-    pub fn try_next(&mut self) -> Result<Option<Object<'_>>> {
+    pub fn try_next(&mut self) -> Result<Option<RefObject<'_>>> {
         let mut oid = std::ptr::null();
         let mut oid_length = 0;
 
@@ -108,19 +80,11 @@ impl<'ioctx, 'rados> List<'ioctx, 'rados> {
         };
 
         if res == 0 {
-            let object = rados_object_list_item {
-                oid_length,
-                oid: oid as _,
-                nspace_length,
-                nspace: nspace as _,
-                locator_length,
-                locator: locator as _,
-            };
+            let oid = unsafe { core::slice::from_raw_parts(oid as _, oid_length) };
+            let locator = unsafe { core::slice::from_raw_parts(locator as _, locator_length) };
+            let nspace = unsafe { core::slice::from_raw_parts(nspace as _, nspace_length) };
 
-            Ok(Some(Object {
-                value: object,
-                _phantom: Default::default(),
-            }))
+            Ok(Some(RefObject::new(oid, locator, nspace)))
         } else {
             let err = RadosError::from(res);
 
@@ -133,21 +97,17 @@ impl<'ioctx, 'rados> List<'ioctx, 'rados> {
     }
 }
 
-impl Iterator for List<'_, '_> {
+impl Iterator for ObjectsIterator<'_, '_> {
     type Item = OwnedObject;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.try_next().ok().flatten()?;
 
-        Some(OwnedObject {
-            oid: next.raw_oid().to_vec(),
-            locator: next.raw_locator().to_vec(),
-            nspace: next.raw_nspace().to_vec(),
-        })
+        Some(next.into())
     }
 }
 
-impl Drop for List<'_, '_> {
+impl Drop for ObjectsIterator<'_, '_> {
     fn drop(&mut self) {
         unsafe { rados_nobjects_list_close(self.inner) };
     }

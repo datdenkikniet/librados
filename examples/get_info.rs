@@ -47,7 +47,7 @@ async fn main() {
 
     println!("Getting objects using list");
 
-    let objects = ctx.list_objects().unwrap();
+    let objects = ctx.objects().unwrap();
 
     for object in objects.take(10) {
         println!(

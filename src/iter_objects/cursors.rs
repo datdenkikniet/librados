@@ -1,8 +1,8 @@
 use crate::{
     IoCtx, Result,
     error::maybe_err_or_val,
+    iter_objects::{RawObject, cursors::cursor::ListCursor},
     librados::{rados_object_list, rados_object_list_slice},
-    list_objects::{Object, cursors::cursor::ListCursor},
 };
 
 impl IoCtx<'_> {
@@ -17,6 +17,8 @@ impl IoCtx<'_> {
 }
 
 /// An object cursor.
+///
+/// This struct is created by calling [`IoCtx::object_cursor`].
 ///
 /// Objects yielded by this cursor are synchronously filtered
 /// by the namespace configured on the passed-in [`IoCtx`].
@@ -54,8 +56,8 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
     ///
     /// May return fewer than `n` entries if the end of the pool has
     /// been reached.
-    pub fn read<'me>(&'me mut self, n: usize) -> Result<Vec<Object<'me>>> {
-        let mut results: Vec<Object> = Vec::with_capacity(n);
+    pub fn read<'me>(&'me mut self, n: usize) -> Result<Vec<RawObject>> {
+        let mut results: Vec<RawObject> = Vec::with_capacity(n);
 
         let mut next = ListCursor::begin(self.io);
 
