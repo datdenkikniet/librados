@@ -44,9 +44,9 @@ impl<'ioctx, 'rados> Cursor<'ioctx, 'rados> {
         Self { io, start, end }
     }
 
-    /// Reset this cursor to the start of the pool,
-    /// causing all previously yielded items to be
-    /// yielded again.
+    /// Reset this cursor to the start of the pool (_not_ the
+    /// original starting point), causing it to (re-)yield
+    /// all items in the pool.
     pub fn reset(&mut self) {
         self.start = ListCursor::begin(self.io);
     }

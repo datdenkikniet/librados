@@ -4,4 +4,4 @@ mod object;
 
 pub use basic::ObjectsIterator;
 pub use cursors::Cursor;
-pub use object::{Object, OwnedObject, RawObject, RefObject};
+pub use object::{ListObject, OwnedObject, RawObject, RefObject};

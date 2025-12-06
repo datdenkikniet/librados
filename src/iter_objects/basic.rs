@@ -15,7 +15,7 @@ impl<'rados> IoCtx<'rados> {
     /// namespace configured on this [`IoCtx`].
     ///
     /// Note that filtering based on the namespace occurs synchronously,
-    /// so yielding from the returned [`List`] may take a long time.
+    /// so yielding from the returned [`ObjectsIterator`] may take a long time.
     ///
     /// For more advanced use cases such as efficient subslicing of
     /// all objects, a [`Cursor`][0] can be used instead (see:

@@ -19,7 +19,7 @@ pub use bytecount::ByteCount;
 pub(crate) use completion::RadosCompletion;
 pub use error::{RadosError, Result};
 pub use ioctx::{IoCtx, Namespace, PoolStats};
-pub use iter_objects::{Cursor, Object, ObjectsIterator, OwnedObject, RawObject, RefObject};
+pub use iter_objects::{Cursor, ListObject, ObjectsIterator, OwnedObject, RawObject, RefObject};
 pub use omapvals::OmapKeyValues;
 pub use rados::{ClusterStats, Rados, RadosConfig};
 pub use stat::Stat;
