@@ -21,6 +21,6 @@ pub use error::{RadosError, Result};
 pub use ioctx::{IoCtx, Namespace, PoolStats};
 pub use iter_objects::{Cursor, ListObject, ObjectsIterator, OwnedObject, RawObject, RefObject};
 pub use omapvals::OmapKeyValues;
-pub use rados::{ClusterStats, Rados, RadosConfig};
+pub use rados::{ClusterStats, FileConfig, Rados, RadosConfig};
 pub use stat::Stat;
 pub use xattr::ExtendedAttributes;

@@ -1,8 +1,33 @@
 use std::ffi::CString;
 
-use crate::{IoCtx, RadosCompletion, Result, error::maybe_err, librados::rados_aio_getxattr};
+use crate::{
+    IoCtx, RadosCompletion, Result,
+    error::{maybe_err, maybe_err_or_val},
+    librados::{rados_aio_getxattr, rados_getxattr},
+};
 
 impl IoCtx<'_> {
+    pub fn get_xattr_blocking(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {
+        let object = CString::new(object).expect("Object ID contained internal NUL");
+        let name = CString::new(name).expect("Name contained internal NUL");
+
+        let mut data_buf = vec![0u8; buf_size];
+
+        let len = maybe_err_or_val(unsafe {
+            rados_getxattr(
+                self.inner(),
+                object.as_ptr(),
+                name.as_ptr(),
+                data_buf.as_mut_ptr() as _,
+                data_buf.len(),
+            )
+        })?;
+
+        data_buf.truncate(len as _);
+
+        Ok(data_buf)
+    }
+
     pub async fn get_xattr(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {
         let object = CString::new(object).expect("Object ID contained internal NUL");
         let name = CString::new(name).expect("Name contained internal NUL");
