@@ -1,4 +1,8 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{
+    fs::File,
+    io::{StdoutLock, Write},
+    path::PathBuf,
+};
 
 use clap::{Parser, ValueEnum};
 use librados::{Cursor, IoCtx, Rados, RadosConfig};
@@ -77,24 +81,53 @@ fn df(rados: &mut Rados) {
         let mut ioctx = IoCtx::new(rados, &pool).unwrap();
         let pool_stat = ioctx.pool_stats().unwrap();
 
-        println!("{pool} {} used, {} rd", pool_stat.user_bytes, pool_stat.object_bytes_read);
+        println!(
+            "{pool} {} used, {} rd",
+            pool_stat.user_bytes, pool_stat.object_bytes_read
+        );
+    }
+}
+
+enum FileOrStdout<'a> {
+    File(File),
+    StdOut(StdoutLock<'a>),
+}
+
+impl FileOrStdout<'_> {
+    fn write_all(&mut self, data: &[u8]) -> std::io::Result<()> {
+        match self {
+            FileOrStdout::File(file) => file.write_all(data),
+            FileOrStdout::StdOut(stdout_lock) => stdout_lock.write_all(data),
+        }
     }
 }
 
 fn get(ioctx: &IoCtx<'_>, get: Get) {
     let stat = ioctx.stat_blocking(&get.object).unwrap();
 
-    let data = ioctx
-        .read_blocking(&get.object, stat.size.into_bytes() as _, 0)
-        .unwrap();
-
-    if let Some(output) = get.out_path
+    let mut out = if let Some(output) = get.out_path
         && output.as_os_str() != "-"
     {
-        let mut file = File::create(output).unwrap();
-        file.write_all(&data).unwrap();
+        let file = File::create(output).unwrap();
+        FileOrStdout::File(file)
     } else {
-        std::io::stdout().write_all(&data).unwrap();
+        FileOrStdout::StdOut(std::io::stdout().lock())
+    };
+
+    let mut left = stat.size.into_bytes();
+    let mut offset = 0;
+
+    while left > 0 {
+        let to_read = (left.min(i32::MAX as u64)) as i32;
+        let data = ioctx.read_blocking(&get.object, to_read, offset).unwrap();
+        out.write_all(&data).unwrap();
+
+        if data.len() == 0 {
+            break;
+        }
+
+        left -= data.len() as u64;
+        offset += data.len();
     }
 }
 

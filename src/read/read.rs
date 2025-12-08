@@ -3,12 +3,30 @@ use crate::{IoCtx, Result, error::maybe_err, librados::rados_read_op_read};
 use super::read_op::{ReadOp, ReadOpExecutor};
 
 impl IoCtx<'_> {
-    pub fn read_blocking(&self, object: &str, bytes: usize, offset: usize) -> Result<Vec<u8>> {
+    /// Blockingly read `bytes` bytes from object `object` at offset `offset`.
+    ///
+    /// The amount of bytes read is 0 if `bytes` is negative.
+    ///
+    /// To test whether a file exists, use [`IoCtx::stat`].
+    ///
+    /// `bytes` is an `i32` due to a limitation set by the `librados` API, allowing
+    /// only a maximum of `i32::MAX` bytes to be read.
+    pub fn read_blocking(&self, object: &str, bytes: i32, offset: usize) -> Result<Vec<u8>> {
+        let bytes = bytes.max(0) as usize;
         let executor = ReadOpExecutor::new(self, ReadObject { bytes, offset })?;
         executor.execute(object)
     }
 
-    pub async fn read(&self, object: &str, bytes: usize, offset: usize) -> Result<Vec<u8>> {
+    /// Read `bytes` bytes from object `object` at offset `offset`.
+    ///
+    /// The amount of bytes read is 0 if `bytes` is negative.
+    ///
+    /// To test whether a file exists, use [`IoCtx::stat`].
+    ///
+    /// `bytes` is an `i32` due to a limitation set by the `librados` API, allowing
+    /// only a maximum of `i32::MAX` bytes to be read.
+    pub async fn read(&self, object: &str, bytes: i32, offset: usize) -> Result<Vec<u8>> {
+        let bytes = bytes.max(0) as usize;
         let executor = ReadOpExecutor::new(self, ReadObject { bytes, offset })?;
         executor.execute_async(object).await
     }
