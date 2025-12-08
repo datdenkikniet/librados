@@ -62,13 +62,12 @@ impl ExtendedAttributes {
 }
 
 impl Iterator for ExtendedAttributes {
-    type Item = (String, Vec<u8>);
+    type Item = Result<(String, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.try_next()
-            .ok()
-            .flatten()
-            .map(|(k, v)| (k.to_string_lossy().into(), v.to_vec()))
+            .map(|v| v.map(|(k, v)| (k.to_string_lossy().into(), v.to_vec())))
+            .transpose()
     }
 }
 

@@ -31,8 +31,16 @@ async fn main() {
         );
     }
 
-    let blocking_omap = ctx.get_omap_vals_blocking(&object).unwrap();
-    let async_omap = ctx.get_omap_vals(&object).await.unwrap();
+    let blocking_omap = ctx
+        .get_omap_vals_blocking(&object)
+        .unwrap()
+        .map(|v| v.unwrap());
+
+    let async_omap = ctx
+        .get_omap_vals(&object)
+        .await
+        .unwrap()
+        .map(|v| v.unwrap());
 
     for ((k1, v1), (k2, v2)) in blocking_omap.zip(async_omap) {
         let k1 = std::str::from_utf8(&k1).unwrap();
@@ -47,7 +55,7 @@ async fn main() {
 
     println!("Getting objects using list");
 
-    let objects = ctx.objects().unwrap();
+    let objects = ctx.objects().unwrap().map(|v| v.unwrap());
 
     for object in objects.take(10) {
         println!(

@@ -57,13 +57,12 @@ impl OmapKeyValues {
 }
 
 impl Iterator for OmapKeyValues {
-    type Item = (Vec<u8>, Vec<u8>);
+    type Item = Result<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.try_next()
-            .ok()
-            .flatten()
-            .map(|(k, v)| (k.to_vec(), v.to_vec()))
+            .map(|v| v.map(|(k, v)| (k.to_vec(), v.to_vec())))
+            .transpose()
     }
 }
 

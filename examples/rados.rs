@@ -134,7 +134,7 @@ fn get(ioctx: &IoCtx<'_>, get: Get) {
 fn ls(ioctx: &IoCtx<'_>, mode: LsMode) {
     match mode {
         LsMode::ObjectIterator => {
-            for object in ioctx.objects().unwrap() {
+            for object in ioctx.objects().unwrap().map(|v| v.unwrap()) {
                 println!("{}", object.oid());
             }
         }

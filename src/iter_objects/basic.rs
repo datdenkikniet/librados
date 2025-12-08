@@ -98,12 +98,12 @@ impl<'ioctx, 'rados> ObjectsIterator<'ioctx, 'rados> {
 }
 
 impl Iterator for ObjectsIterator<'_, '_> {
-    type Item = OwnedObject;
+    type Item = Result<OwnedObject>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.try_next().ok().flatten()?;
+        let next = self.try_next().map(|v| v.map(Into::into)).transpose()?;
 
-        Some(next.into())
+        Some(next)
     }
 }
 
