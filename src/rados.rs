@@ -6,11 +6,12 @@ use std::{
 
 use crate::{
     ByteCount, RadosError, Result,
-    error::maybe_err,
+    error::{maybe_err, maybe_err_or_val},
     librados::{
         LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_cluster_stat,
         rados_cluster_stat_t, rados_conf_parse_argv, rados_conf_parse_env, rados_conf_read_file,
-        rados_conf_set, rados_connect, rados_create, rados_shutdown, rados_t, rados_version,
+        rados_conf_set, rados_connect, rados_create, rados_pool_list, rados_shutdown, rados_t,
+        rados_version,
     },
 };
 
@@ -216,6 +217,30 @@ impl Rados {
 
         let stats = unsafe { cluster_stats.assume_init() };
         Ok(stats.into())
+    }
+
+    pub fn list_pools(&mut self) -> Result<Vec<String>> {
+        let len =
+            maybe_err_or_val(unsafe { rados_pool_list(self.inner(), std::ptr::null_mut(), 0) })?;
+
+        let mut data = vec![0i8; len as usize];
+
+        maybe_err(unsafe { rados_pool_list(self.inner(), data.as_mut_ptr(), data.len()) })?;
+
+        let mut pools = Vec::new();
+        let mut current_value = String::new();
+
+        for byte in data.into_iter() {
+            if byte == 0 && current_value.len() == 0 {
+                break;
+            } else if byte == 0 {
+                pools.push(std::mem::take(&mut current_value));
+            } else {
+                current_value.push(byte as u8 as char);
+            }
+        }
+
+        Ok(pools)
     }
 
     pub fn inner(&self) -> rados_t {
