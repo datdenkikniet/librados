@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    ByteCount, RadosError, Result,
+    ByteCount, IoCtx, RadosError, Result,
     error::{maybe_err, maybe_err_or_val},
     librados::{
         LIBRADOS_VER_EXTRA, LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, rados_cluster_stat,
@@ -208,6 +208,10 @@ impl Rados {
         maybe_err(unsafe { rados_connect(rados) }).map_err(ConnectError::Connect)?;
 
         Ok(Self(rados))
+    }
+
+    pub fn create_ioctx(&mut self, pool: &str) -> Result<IoCtx<'_>> {
+        IoCtx::new(self, pool)
     }
 
     pub fn cluster_stats(&mut self) -> Result<ClusterStats> {

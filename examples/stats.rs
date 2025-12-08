@@ -1,4 +1,4 @@
-use librados::{IoCtx, Rados, RadosConfig};
+use librados::{Rados, RadosConfig};
 
 fn main() {
     let config = RadosConfig::default();
@@ -13,7 +13,7 @@ fn main() {
     println!("{:#?}", stats);
 
     if let Some(pool) = std::env::args().nth(1) {
-        let mut ctx = IoCtx::new(&mut rados, &pool).unwrap();
+        let mut ctx = rados.create_ioctx(&pool).unwrap();
         println!("{:#?}", ctx.pool_stats().unwrap());
     } else {
         println!("No pool argument provided, not looking up pool stats.")

@@ -31,7 +31,7 @@ pub enum Namespace {
     All,
 }
 
-/// A rados IO-context.
+/// A rados input-output context. These are created using [`Rados::create_ioctx`].
 ///
 /// This struct contains common settings for interacting with a cluster.
 #[derive(Debug)]
@@ -44,7 +44,7 @@ unsafe impl Send for IoCtx<'_> {}
 unsafe impl Sync for IoCtx<'_> {}
 
 impl<'rados> IoCtx<'rados> {
-    pub fn new(rados: &'rados mut Rados, pool: &str) -> Result<Self> {
+    pub(crate) fn new(rados: &'rados mut Rados, pool: &str) -> Result<Self> {
         let mut inner = std::ptr::null_mut();
         let name = CString::new(pool).unwrap();
 

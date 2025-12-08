@@ -1,4 +1,4 @@
-use librados::{IoCtx, Rados, RadosConfig};
+use librados::{Rados, RadosConfig};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -11,7 +11,7 @@ async fn main() {
 
     let config = RadosConfig::default();
     let mut rados = Rados::connect(&config).unwrap();
-    let ctx = IoCtx::new(&mut rados, &pool).unwrap();
+    let ctx = rados.create_ioctx(&pool).unwrap();
 
     let stats = ctx.stat(&object).await.unwrap();
     println!("File stats: {stats:?}");

@@ -1,4 +1,4 @@
-use librados::{IoCtx, Rados, RadosConfig};
+use librados::{Rados, RadosConfig};
 
 fn main() {
     let mut args = std::env::args();
@@ -7,7 +7,7 @@ fn main() {
 
     let config = RadosConfig::default();
     let mut rados = Rados::connect(&config).unwrap();
-    let ctx = IoCtx::new(&mut rados, &pool).unwrap();
+    let ctx = rados.create_ioctx(&pool).unwrap();
 
     let cursor = ctx.object_cursor();
     let cursors = cursor.split(std::thread::available_parallelism().unwrap().get());

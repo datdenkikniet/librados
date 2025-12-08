@@ -56,11 +56,11 @@ fn main() {
 
     match cli {
         Cli::Ls { mode, pool } => {
-            let ioctx = IoCtx::new(&mut rados, &pool).unwrap();
+            let ioctx = rados.create_ioctx(&pool).unwrap();
             ls(&ioctx, mode)
         }
         Cli::Get(opt) => {
-            let ioctx = IoCtx::new(&mut rados, &opt.pool).unwrap();
+            let ioctx = rados.create_ioctx(&opt.pool).unwrap();
             get(&ioctx, opt)
         }
         Cli::LsPools => {
@@ -78,7 +78,7 @@ fn df(rados: &mut Rados) {
     let pools = rados.list_pools().unwrap();
 
     for pool in pools {
-        let mut ioctx = IoCtx::new(rados, &pool).unwrap();
+        let mut ioctx = rados.create_ioctx(&pool).unwrap();
         let pool_stat = ioctx.pool_stats().unwrap();
 
         println!(
