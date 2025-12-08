@@ -1,7 +1,13 @@
 use crate::librados::{rados_object_list_free, rados_object_list_item};
 
+mod sealed {
+    pub(crate) trait Sealed {}
+}
+
 macro_rules! spec_impl {
     ($ty:ty) => {
+        impl sealed::Sealed for $ty {}
+
         impl $ty {
             /// Get the OID of this object.
             pub fn oid(&self) -> &str {
@@ -48,7 +54,8 @@ spec_impl!(OwnedObject);
 ///
 /// [0]: crate::IoCtx::objects
 /// [1]: crate::IoCtx::object_cursor
-pub trait ListObject {
+#[allow(private_bounds)]
+pub trait ListObject: Send + Sync + sealed::Sealed {
     /// Get the raw bytes making up the OID of this
     /// object.
     ///
@@ -92,11 +99,14 @@ pub trait ListObject {
     }
 }
 
-/// Raw objects (there are freed by librados).
+/// Raw objects (that are freed by librados).
 #[repr(transparent)]
 pub struct RawObject {
     value: rados_object_list_item,
 }
+
+unsafe impl Send for RawObject {}
+unsafe impl Sync for RawObject {}
 
 impl RawObject {
     /// Convert this raw object into a [`RefObject`].
