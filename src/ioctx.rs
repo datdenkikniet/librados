@@ -16,12 +16,12 @@
 use std::{ffi::CString, marker::PhantomData, mem::MaybeUninit};
 
 use crate::{
-    ByteCount, Rados, Result,
+    ByteCount, Rados, RadosCompletion, Result,
     error::{maybe_err, maybe_err_or_val},
     librados::{
-        LIBRADOS_ALL_NSPACES, rados_ioctx_create, rados_ioctx_destroy, rados_ioctx_get_namespace,
-        rados_ioctx_pool_stat, rados_ioctx_set_namespace, rados_ioctx_t, rados_pool_stat_t,
-        rados_t,
+        LIBRADOS_ALL_NSPACES, rados_aio_flush_async, rados_ioctx_create, rados_ioctx_destroy,
+        rados_ioctx_get_namespace, rados_ioctx_pool_stat, rados_ioctx_set_namespace, rados_ioctx_t,
+        rados_pool_stat_t, rados_t,
     },
 };
 
@@ -89,6 +89,22 @@ impl<'rados> IoCtx<'rados> {
             let ns = String::from_utf8(str).expect("Namespace is not valid UTF8");
             Ok(Namespace::Named(ns))
         }
+    }
+
+    /// Flush all outstanding asynchronous operations.
+    ///
+    /// This flushes all outstanding asynchronous operations on this [`IoCtx`].
+    ///
+    /// It shouldn't be necessary to ever call this function if all futures called
+    /// on this [`IoCtx`] are properly awaited, but it is good to have.
+    pub async fn flush(&mut self) -> Result<()> {
+        let completion = unsafe {
+            RadosCompletion::new_with(false, (), |completion, _state| {
+                maybe_err(rados_aio_flush_async(self.inner(), completion))
+            })
+        }?;
+
+        completion.wait_for().await.map(|_| ())
     }
 
     pub(crate) fn inner(&self) -> rados_ioctx_t {
