@@ -2,8 +2,9 @@ use crate::{
     ByteCount, IoCtx, Result,
     error::maybe_err,
     librados::{rados_read_op_stat2, timespec},
-    read_op::{ReadOp, ReadOpExecutor},
 };
+
+use super::read_op::{ReadOp, ReadOpExecutor};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Stat {

@@ -1,9 +1,6 @@
-use crate::{
-    IoCtx, Result,
-    error::maybe_err,
-    librados::rados_read_op_read,
-    read_op::{ReadOp, ReadOpExecutor},
-};
+use crate::{IoCtx, Result, error::maybe_err, librados::rados_read_op_read};
+
+use super::read_op::{ReadOp, ReadOpExecutor};
 
 impl IoCtx<'_> {
     pub fn read_blocking(&self, object: &str, bytes: usize, offset: usize) -> Result<Vec<u8>> {

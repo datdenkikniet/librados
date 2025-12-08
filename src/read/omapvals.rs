@@ -7,9 +7,11 @@ use crate::{
         rados_omap_get_end, rados_omap_get_next2, rados_omap_iter_t, rados_read_op_omap_get_vals2,
         rados_read_op_t,
     },
-    read_op::{ReadOp, ReadOpExecutor},
 };
 
+use super::read_op::{ReadOp, ReadOpExecutor};
+
+#[derive(Debug)]
 pub struct OmapKeyValues {
     inner: rados_omap_iter_t,
 }
