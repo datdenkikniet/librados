@@ -25,9 +25,12 @@ use crate::{
     },
 };
 
+/// A namespace within the pool.
 #[derive(Clone, Debug)]
 pub enum Namespace {
+    /// A named namespace.
     Named(String),
+    /// All namespaces.
     All,
 }
 
@@ -56,6 +59,7 @@ impl<'rados> IoCtx<'rados> {
         })
     }
 
+    /// Fetch statistics about the pool that this [`IoCtx`] is operating on.
     pub fn pool_stats(&mut self) -> Result<PoolStats> {
         let mut stat = MaybeUninit::uninit();
         maybe_err(unsafe { rados_ioctx_pool_stat(self.inner, stat.as_mut_ptr()) })?;
@@ -63,6 +67,7 @@ impl<'rados> IoCtx<'rados> {
         Ok(stat.into())
     }
 
+    /// Set the object namespace that this [`IoCtx`] operates on.
     pub fn set_namespace(&mut self, ns: &Namespace) {
         let ns = match ns {
             Namespace::Named(n) => {
@@ -74,6 +79,7 @@ impl<'rados> IoCtx<'rados> {
         unsafe { rados_ioctx_set_namespace(self.inner, ns.as_ptr()) };
     }
 
+    /// Get the namespace that this [`IoCtx`] operates on.
     pub fn get_namespace(&self, max_len: usize) -> Result<Namespace> {
         let mut str = Vec::with_capacity(max_len);
 
@@ -118,6 +124,7 @@ impl Drop for IoCtx<'_> {
     }
 }
 
+/// Statistics about a pool.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct PoolStats {
     #[doc = "space used"]

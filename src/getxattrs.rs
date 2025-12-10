@@ -7,6 +7,9 @@ use crate::{
 };
 
 impl<'rados> IoCtx<'rados> {
+    /// Get the extended attributes of `object`.
+    ///
+    // TODO: blocking version
     pub async fn get_xattrs<'io, 's>(&'io self, object: &'s str) -> Result<ExtendedAttributes> {
         let oid = CString::new(object).expect("Object name had interior NUL.");
 

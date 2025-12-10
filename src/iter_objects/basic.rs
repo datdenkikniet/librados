@@ -6,7 +6,7 @@ use crate::{
     iter_objects::OwnedObject,
     librados::{
         rados_list_ctx_t, rados_nobjects_list_close, rados_nobjects_list_get_pg_hash_position,
-        rados_nobjects_list_next2, rados_nobjects_list_open, rados_nobjects_list_seek,
+        rados_nobjects_list_next2, rados_nobjects_list_open,
     },
 };
 
@@ -49,14 +49,20 @@ unsafe impl Send for ObjectsIterator<'_, '_> {}
 unsafe impl Sync for ObjectsIterator<'_, '_> {}
 
 impl<'ioctx, 'rados> ObjectsIterator<'ioctx, 'rados> {
+    /// Get the PG hash position for this iterator.
+    ///
+    /// See [`rados_nobjects_list_get_pg_hash_position`][0] for more
+    /// information.
+    ///
+    /// [0]: https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_nobjects_list_get_pg_hash_position
     pub fn get_pg_hash_position(&self) -> u32 {
         unsafe { rados_nobjects_list_get_pg_hash_position(self.inner) }
     }
 
-    pub fn seek(&mut self, pos: u32) -> u32 {
-        unsafe { rados_nobjects_list_seek(self.inner, pos) }
-    }
-
+    /// Try to get the next object from this iterator.
+    ///
+    /// See [`RefObject`] and the conversions it implements
+    /// for more information.
     pub fn try_next(&mut self) -> Result<Option<RefObject<'_>>> {
         let mut oid = std::ptr::null();
         let mut oid_length = 0;

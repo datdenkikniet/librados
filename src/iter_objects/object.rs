@@ -222,6 +222,8 @@ impl OwnedObject {
         }
     }
 
+    /// Split the owned object into a `(oid, locator, nspace)`
+    /// tuple.
     pub fn into_parts(self) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         (self.oid, self.locator, self.nspace)
     }

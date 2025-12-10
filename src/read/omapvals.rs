@@ -11,6 +11,7 @@ use crate::{
 
 use super::read_op::{ReadOp, ReadOpExecutor};
 
+/// An iterator over Omap key value pairs.
 #[derive(Debug)]
 pub struct OmapKeyValues {
     inner: rados_omap_iter_t,
@@ -23,6 +24,9 @@ impl OmapKeyValues {
         Self { inner }
     }
 
+    /// Try to get the next key/value pair.
+    ///
+    /// Returns `Ok(None)` if no more values are available.
     pub fn try_next(&mut self) -> Result<Option<(&[u8], &[u8])>> {
         let mut key = std::ptr::null_mut();
         let mut val = std::ptr::null_mut();
@@ -73,6 +77,7 @@ impl Drop for OmapKeyValues {
 }
 
 impl<'rados> IoCtx<'rados> {
+    /// Blockingly get the omap key value pairs for `object`.
     pub fn get_omap_vals_blocking(&self, object: &str) -> Result<OmapKeyValues> {
         let operation = OmapGetVals {
             start_after: None,
@@ -85,6 +90,7 @@ impl<'rados> IoCtx<'rados> {
         executor.execute(object)
     }
 
+    /// Get the omap key value pairs for `object`.
     pub async fn get_omap_vals(&self, object: &str) -> Result<OmapKeyValues> {
         let operation = OmapGetVals {
             start_after: None,

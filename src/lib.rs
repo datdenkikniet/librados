@@ -1,3 +1,6 @@
+#![doc = include_str!("../README.md")]
+#![warn(missing_docs)]
+
 #[allow(warnings)]
 mod librados;
 
@@ -9,7 +12,7 @@ mod getxattrs;
 mod ioctx;
 mod iter_objects;
 mod rados;
-pub mod read;
+mod read;
 mod xattr;
 
 pub use bytecount::ByteCount;
@@ -18,4 +21,5 @@ pub use error::{RadosError, Result};
 pub use ioctx::{IoCtx, Namespace, PoolStats};
 pub use iter_objects::{Cursor, ListObject, ObjectsIterator, OwnedObject, RawObject, RefObject};
 pub use rados::{ClusterStats, FileConfig, Rados, RadosConfig};
+pub use read::{OmapKeyValues, Stat};
 pub use xattr::ExtendedAttributes;

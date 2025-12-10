@@ -6,18 +6,29 @@ use crate::{
 
 use super::read_op::{ReadOp, ReadOpExecutor};
 
+/// The basic statistics of an object.
 #[derive(Debug, Clone, Copy)]
 pub struct Stat {
+    /// The size of the object.
     pub size: ByteCount,
+    /// The last time this object was modified.
     pub mtime: timespec,
 }
 
 impl IoCtx<'_> {
+    /// Blockingly get the statistics for object `obj`.
+    ///
+    /// This returns [`Err(RadosError::Noent)`](crate::RadosError::Noent)
+    /// if the file does not exist.
     pub fn stat_blocking(&self, obj: &str) -> Result<Stat> {
         let executor = ReadOpExecutor::new(self, StatOp)?;
         executor.execute(obj)
     }
 
+    /// Get the statistics for object `obj`.
+    ///
+    /// This returns [`Err(RadosError::Noent)`](crate::RadosError::Noent)
+    /// if the file does not exist.
     pub async fn stat(&self, obj: &str) -> Result<Stat> {
         let executor = ReadOpExecutor::new(self, StatOp)?;
         executor.execute_async(obj).await

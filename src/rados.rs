@@ -15,12 +15,27 @@ use crate::{
     },
 };
 
+/// File configurations that can be applied when connecting to a Rados cluster.
 #[derive(Debug, Clone)]
 pub enum FileConfig {
+    /// Search the default file paths.
+    ///
+    /// From the librados documentation:
+    ///
+    /// * `$CEPH_CONF` (environment variable)
+    /// * `/etc/ceph/ceph.conf`
+    /// * `~/.ceph/config`
+    /// * `ceph.conf` (in the current working directory)
+    /// ```
     Default,
+    /// Apply configuration from the file at the provided
+    /// path.
     Path(String),
 }
 
+/// Configuration to be used when connecting to a Rados cluster.
+///
+/// The `Default` implementation returns [`RadosConfig::new(Some(FileConfig::Default)`](RadosConfig::new).
 #[derive(Debug, Clone)]
 pub struct RadosConfig {
     id: Option<CString>,
@@ -37,6 +52,10 @@ impl Default for RadosConfig {
 }
 
 impl RadosConfig {
+    /// Create a new [`RadosConfig`] using empty values
+    /// for all fields, and set the file configuration to `files`.
+    ///
+    /// Additionally, it sets `rados_quiet` to `true`.
     pub fn new(file: Option<FileConfig>) -> Self {
         Self {
             id: None,
@@ -47,45 +66,62 @@ impl RadosConfig {
         }
     }
 
+    /// Set the ID to be used when connecting.
+    ///
+    /// # Panics
+    /// This function panics if `id` contains an internal `0` byte.
     pub fn set_id<'a>(&'a mut self, id: Option<&str>) -> &'a mut Self {
         self.id = id.map(|v| CString::new(v).expect("User contained NUL byte"));
         self
     }
 
+    /// Set the file configurations to search.
     pub fn set_files(&mut self, files: Vec<FileConfig>) -> &mut Self {
         self.files = files;
         self
     }
 
+    /// Set the arguments to pass when connecting.
+    ///
+    /// For more info, see [`rados_conf_parse_argv`](https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_conf_parse_argv).
     pub fn set_argv(&mut self, argv: Vec<String>) -> &mut Self {
         self.argv = argv;
         self
     }
 
+    /// Set the environment variables to search.
+    ///
+    /// For more info, see [`rados_conf_parse_env`](https://docs.ceph.com/en/latest/rados/api/librados/#c.rados_conf_parse_env)
     pub fn set_env(&mut self, env: Vec<String>) -> &mut Self {
         self.env = env;
         self
     }
 
+    /// Configure librados to be quiet.
+    ///
+    /// If this is set to `false`, log messages from librados are
+    /// printed to stdout.
     pub fn set_rados_quiet(&mut self, quiet: bool) -> &mut Self {
         self.rados_quiet = quiet;
         self
     }
 }
 
+/// Cluster statistics.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClusterStats {
     #[doc = "total device size"]
+    /// The total count of bytes of device bytes usable.
     pub size: ByteCount,
-    #[doc = "total used"]
+    /// The amount of bytes used in the cluster.
     pub used: ByteCount,
-    #[doc = "total available/free"]
+    /// The amount of bytes available.
     pub available: ByteCount,
-    #[doc = "number of objects"]
+    /// The number of objects.
     pub num_objects: u64,
 }
 
-impl From<rados_cluster_stat_t> for ClusterStats {
+impl ClusterStats {
     fn from(value: rados_cluster_stat_t) -> Self {
         Self {
             size: ByteCount::from_kb(value.kb),
@@ -96,6 +132,11 @@ impl From<rados_cluster_stat_t> for ClusterStats {
     }
 }
 
+/// A connection to a rados cluster.
+///
+/// This struct maintains a connection, but most actual
+/// object operations are performed using an [`IoCtx`]
+/// (see [`Rados::create_ioctx`]).
 #[derive(Debug)]
 pub struct Rados(rados_t);
 
@@ -112,6 +153,7 @@ pub enum ConnectError {
 }
 
 impl Rados {
+    /// Connect to the rados cluster using the provided configuration.
     pub fn connect(config: &RadosConfig) -> std::result::Result<Self, ConnectError> {
         let (mut maj, mut min, mut ext) = (0i32, 0i32, 0i32);
 
@@ -210,19 +252,22 @@ impl Rados {
         Ok(Self(rados))
     }
 
+    /// Attempt to create a new [`IoCtx`] for rados pool `pool` in this cluster.
     pub fn create_ioctx(&mut self, pool: &str) -> Result<IoCtx<'_>> {
         IoCtx::new(self, pool)
     }
 
+    /// Fetch statistics for the cluster.
     pub fn cluster_stats(&mut self) -> Result<ClusterStats> {
         let mut cluster_stats = MaybeUninit::uninit();
 
         maybe_err(unsafe { rados_cluster_stat(self.0, cluster_stats.as_mut_ptr()) })?;
 
         let stats = unsafe { cluster_stats.assume_init() };
-        Ok(stats.into())
+        Ok(ClusterStats::from(stats))
     }
 
+    /// List the pools available in the cluster.
     pub fn list_pools(&mut self) -> Result<Vec<String>> {
         let len =
             maybe_err_or_val(unsafe { rados_pool_list(self.inner(), std::ptr::null_mut(), 0) })?;
@@ -247,7 +292,7 @@ impl Rados {
         Ok(pools)
     }
 
-    pub fn inner(&self) -> rados_t {
+    pub(crate) fn inner(&self) -> rados_t {
         self.0
     }
 }

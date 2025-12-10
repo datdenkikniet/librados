@@ -7,6 +7,14 @@ use crate::{
 };
 
 impl IoCtx<'_> {
+    /// Blockingly get the value of extended attribute
+    /// `name` for object `object`, using a buffer of `buf_size`
+    /// bytes to store the result.
+    ///
+    /// # Panics
+    /// This function panics of `object` or `name` have internal `0` bytes.
+    ///
+    // TODO: what does this return if `buf_size` is too small?
     pub fn get_xattr_blocking(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {
         let object = CString::new(object).expect("Object ID contained internal NUL");
         let name = CString::new(name).expect("Name contained internal NUL");
@@ -28,6 +36,14 @@ impl IoCtx<'_> {
         Ok(data_buf)
     }
 
+    /// Get the value of extended attribute `name`
+    /// for object `object`, using a buffer of `buf_size`
+    /// bytes to store the result.
+    ///
+    /// # Panics
+    /// This function panics of `object` or `name` have internal `0` bytes.
+    ///
+    // TODO: what does this return if `buf_size` is too small?
     pub async fn get_xattr(&self, object: &str, name: &str, buf_size: usize) -> Result<Vec<u8>> {
         let object = CString::new(object).expect("Object ID contained internal NUL");
         let name = CString::new(name).expect("Name contained internal NUL");
