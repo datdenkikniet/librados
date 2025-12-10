@@ -1,0 +1,5 @@
+The copy of `librados.so.2.0.0` included in this source tree is licensed under the LGPLv2.1 license (see [LICENSE-LGPL2.1](./LICENSE-LGPL2.1)).
+
+This project dynamically links against [`librados`](https://github.com/ceph/ceph/blob/main/src/include/rados/librados.h), licensed
+under the LGPLv2.1 license (see [LICENSE-LGPL2.1](./LICENSE-LGPL2.1)), which places requirements on software compiled using this
+library.
