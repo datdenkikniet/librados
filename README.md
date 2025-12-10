@@ -1,6 +1,6 @@
 # `librados`
 
-Idiomatic bindings (both sync and `async`) for Ceph's `librados`.
+Idiomatic bindings (both sync and runtime-agnostic `async`) for Ceph's `librados`.
 
 # Usage
 
