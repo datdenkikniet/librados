@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-crc32c = "0.6.8"
+crc = "3.4.0"
+crc-catalog = "2.4.0"

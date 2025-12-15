@@ -1,8 +1,7 @@
-use std::{num::NonZeroU8, u32};
-
-use crc32c::crc32c;
+use std::num::NonZeroU8;
 
 use crate::frame::{
+    SEGMENT_CRC,
     epilogue::Epilogue,
     preamble::{Preamble, SegmentDetail, Tag},
 };
@@ -11,12 +10,13 @@ const EMPTY: &'static [u8] = &[];
 
 #[derive(Debug)]
 pub struct Frame<'a> {
+    tag: Tag,
     valid_segments: NonZeroU8,
     segments: [&'a [u8]; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(segments: &[&'a [u8]]) -> Option<Self> {
+    pub fn new(tag: Tag, segments: &[&'a [u8]]) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
         }
@@ -28,12 +28,13 @@ impl<'a> Frame<'a> {
         segments_out[..segments.len()].copy_from_slice(segments);
 
         Some(Self {
+            tag,
             valid_segments,
             segments: segments_out,
         })
     }
 
-    pub fn write(&self, tag: Tag, buffer: &mut [u8]) -> Result<usize, String> {
+    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
         let segments = &self.segments[..self.valid_segments.get() as usize];
 
         let mut segment_details = [SegmentDetail::default(); 4];
@@ -46,7 +47,7 @@ impl<'a> Frame<'a> {
 
         let preamble = Preamble {
             flags: 0,
-            tag,
+            tag: self.tag,
             segment_count: self.valid_segments,
             segment_details,
             _reserved: 0,
@@ -65,12 +66,7 @@ impl<'a> Frame<'a> {
                 ));
             }
 
-            if segment.len() == 0 {
-                crcs[idx] = u32::MAX - 1;
-            } else {
-                crcs[idx] = crc32c(segment);
-            }
-
+            crcs[idx] = SEGMENT_CRC.checksum(segment);
             buffer[..segment.len()].copy_from_slice(segment);
             buffer = &mut buffer[segment.len()..];
             used += segment.len();
@@ -119,23 +115,14 @@ impl<'a> Frame<'a> {
         for (idx, crc) in epilogue.crcs.iter().copied().enumerate() {
             if idx < preamble.segment_count.get() as usize {
                 let segment = segments[idx];
-
-                if segment.len() == 0 && crc != u32::MAX - 1 {
+                let calculated_crc = SEGMENT_CRC.checksum(segment);
+                if crc != calculated_crc {
                     return Err(format!(
-                        "Found incorrect CRC 0x{:08X} for used but empty segment (#{})",
+                        "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
                         crc,
+                        calculated_crc,
                         idx + 1
                     ));
-                } else {
-                    let calculated_crc = crc32c(&segments[idx]);
-                    if crc != calculated_crc {
-                        return Err(format!(
-                            "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
-                            crc,
-                            calculated_crc,
-                            idx + 1
-                        ));
-                    }
                 }
             } else {
                 if crc != 0 {
@@ -149,22 +136,9 @@ impl<'a> Frame<'a> {
         }
 
         Ok(Self {
+            tag: preamble.tag,
             valid_segments: preamble.segment_count,
             segments,
         })
     }
-}
-
-#[test]
-pub fn round_trip() {
-    let frame = Frame::new(&[&[1, 2, 3]]).unwrap();
-
-    let output_buffer = &mut [0u8; 64];
-    let len = frame.write(Tag::Hello, output_buffer).unwrap();
-
-    println!("{:02X?}", &output_buffer[..len]);
-
-    let frame = Frame::parse(&output_buffer[..len]).unwrap();
-
-    panic!("{frame:?}");
 }
