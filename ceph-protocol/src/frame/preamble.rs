@@ -1,6 +1,6 @@
 use std::num::NonZeroU8;
 
-use crc32c::crc32c;
+use crate::frame::CRC;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -111,7 +111,7 @@ impl Preamble {
 
         // Calculate crc
         assert_eq!(used, 28);
-        let crc = crc32c(&buffer[..used]);
+        let crc = CRC.checksum(&buffer[..used]);
         buffer[used..used + 4].copy_from_slice(&crc.to_le_bytes());
         used += 4;
 
@@ -156,11 +156,11 @@ impl Preamble {
         let crc = <[u8; 4]>::try_from(&rest[2..]).unwrap();
         let crc = u32::from_le_bytes(crc);
 
-        let calculated_crc = crc32c(&input[..28]);
+        let calculated_crc = CRC.checksum(&input[..28]);
         if calculated_crc != crc {
-            // return Err(format!(
-            //     "Preamble CRC mismatch (received: 0x{crc:08X}, calculated: 0x{calculated_crc:08X}"
-            // ));
+            return Err(format!(
+                "Preamble CRC mismatch (received: 0x{crc:08X}, calculated: 0x{calculated_crc:08X}"
+            ));
         }
 
         Ok(Self {
