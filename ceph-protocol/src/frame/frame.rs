@@ -1,10 +1,22 @@
 use std::num::NonZeroU8;
 
 use crate::frame::{
-    SEGMENT_CRC,
     epilogue::Epilogue,
     preamble::{Preamble, SegmentDetail, Tag},
 };
+
+const ALGO: crc::Algorithm<u32> = crc::Algorithm {
+    width: 32,
+    poly: 0x1EDC6F41,
+    init: u32::MAX,
+    refin: true,
+    refout: true,
+    xorout: 0,
+    check: 0,
+    residue: 0,
+};
+
+const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 const EMPTY: &'static [u8] = &[];
 
@@ -66,7 +78,7 @@ impl<'a> Frame<'a> {
                 ));
             }
 
-            crcs[idx] = SEGMENT_CRC.checksum(segment);
+            crcs[idx] = CRC.checksum(segment);
             buffer[..segment.len()].copy_from_slice(segment);
             buffer = &mut buffer[segment.len()..];
             used += segment.len();
@@ -115,7 +127,7 @@ impl<'a> Frame<'a> {
         for (idx, crc) in epilogue.crcs.iter().copied().enumerate() {
             if idx < preamble.segment_count.get() as usize {
                 let segment = segments[idx];
-                let calculated_crc = SEGMENT_CRC.checksum(segment);
+                let calculated_crc = CRC.checksum(segment);
                 if crc != calculated_crc {
                     return Err(format!(
                         "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
@@ -140,5 +152,9 @@ impl<'a> Frame<'a> {
             valid_segments: preamble.segment_count,
             segments,
         })
+    }
+
+    pub fn segments(&self) -> &[&[u8]] {
+        &self.segments[..self.valid_segments.get() as usize]
     }
 }

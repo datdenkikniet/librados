@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 crc = "3.4.0"
 crc-catalog = "2.4.0"
+nix = { version = "0.30.1", default-features = false }
