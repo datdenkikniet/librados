@@ -1,6 +1,22 @@
 use std::num::NonZeroU8;
 
-use crate::frame::CRC;
+/// The algorithm parameters used for the CRC
+/// calculated by Ceph.
+///
+/// Note: these parameters do _not_ match the `crc32-c` (CASTAGNOLI)
+/// algorithm.
+const ALGO: crc::Algorithm<u32> = crc::Algorithm {
+    width: 32,
+    poly: 0x1EDC6F41,
+    init: 0,
+    refin: true,
+    refout: true,
+    xorout: 0,
+    check: 0,
+    residue: 0,
+};
+
+const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
