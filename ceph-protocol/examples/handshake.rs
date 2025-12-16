@@ -59,6 +59,4 @@ fn main() {
 
     let hello = Hello::parse(hello_response.segments()[0]).unwrap();
     println!("{hello:#?}");
-
-    loop {}
 }
