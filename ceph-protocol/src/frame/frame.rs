@@ -33,7 +33,6 @@ impl<'a> Frame<'a> {
             return None;
         }
 
-        assert!(segments.len() <= 4);
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
 
         let mut segments_out = [EMPTY; 4];
@@ -46,7 +45,7 @@ impl<'a> Frame<'a> {
         })
     }
 
-    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
+    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
         let segments = &self.segments[..self.valid_segments.get() as usize];
 
         let mut segment_details = [SegmentDetail::default(); 4];
@@ -65,22 +64,12 @@ impl<'a> Frame<'a> {
             _reserved: 0,
         };
 
-        let mut used = preamble.write(buffer)?;
-        let (_, mut buffer) = buffer.split_at_mut(used);
+        let mut used = preamble.write(&mut output)?;
         let mut crcs = [0u32; 4];
 
         for (idx, segment) in segments.iter().enumerate() {
-            if buffer.len() < segment.len() {
-                return Err(format!(
-                    "Expected buffer of at least {} bytes to write segment, only got {}",
-                    segment.len(),
-                    buffer.len()
-                ));
-            }
-
             crcs[idx] = CRC.checksum(segment);
-            buffer[..segment.len()].copy_from_slice(segment);
-            buffer = &mut buffer[segment.len()..];
+            output.write_all(segment)?;
             used += segment.len();
         }
 
@@ -89,22 +78,13 @@ impl<'a> Frame<'a> {
             crcs,
         };
 
-        used += epilogue.write(buffer)?;
+        used += epilogue.write(&mut output)?;
 
         Ok(used)
     }
 
-    pub fn parse(data: &'a [u8]) -> Result<Self, String> {
-        if data.len() < Preamble::LEN + Epilogue::LEN {
-            return Err(format!(
-                "Expected at least {} preamble and epilogue bytes, got {}",
-                Preamble::LEN + Epilogue::LEN,
-                data.len()
-            ));
-        }
-
-        let (preamble, mut trailer) = data.split_at(32);
-        let preamble = Preamble::parse(&preamble)?;
+    pub fn parse(preamble: &Preamble, data: &'a [u8]) -> Result<Self, String> {
+        let mut trailer = data;
 
         let mut segments = [EMPTY; 4];
 
@@ -152,6 +132,10 @@ impl<'a> Frame<'a> {
             valid_segments: preamble.segment_count,
             segments,
         })
+    }
+
+    pub const fn tag(&self) -> Tag {
+        self.tag
     }
 
     pub fn segments(&self) -> &[&[u8]] {

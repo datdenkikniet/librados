@@ -5,28 +5,26 @@ use std::{
 };
 
 use ceph_protocol::{
-    EntityType, Hello,
-    banner::Banner,
-    entity_address::EntityAddress,
-    frame::{Frame, Tag},
+    Connection, EntityType, Hello, banner::Banner, entity_address::EntityAddress, frame::Frame,
 };
 
 fn main() {
     let mut stream = TcpStream::connect("10.0.1.227:3300").unwrap();
 
-    let banner = Banner::default();
-    let mut banner_buffer = [0u8; 26];
-    let tx_banner = banner.write(&mut banner_buffer).unwrap();
+    let mut connection = Connection::new();
 
-    stream.write_all(tx_banner).unwrap();
+    let mut banner_buffer = [0u8; 26];
+    connection.banner().write(&mut banner_buffer);
+
+    stream.write_all(&banner_buffer).unwrap();
 
     stream.read_exact(&mut banner_buffer).unwrap();
 
     let rx_banner = Banner::parse(&banner_buffer).unwrap();
+    connection.recv_banner(&rx_banner).unwrap();
 
     println!("RX banner: {rx_banner:?}");
 
-    let mut hello_buffer = [0u8; 128];
     let hello = Hello {
         entity_type: EntityType::Client,
         peer_address: EntityAddress {
@@ -35,28 +33,24 @@ fn main() {
             address: stream.peer_addr().ok(),
         },
     };
-    let len = hello.write(&mut hello_buffer).unwrap();
 
-    let hello_frame = Frame::new(Tag::Hello, &[&hello_buffer[..len]]).unwrap();
+    let hello_frame = connection.send(hello);
 
-    let mut frame_buffer = [0u8; 128];
-
-    let len = hello_frame.write(&mut frame_buffer).unwrap();
-
-    println!("{:?}", &frame_buffer[..len]);
-
-    stream.write_all(&frame_buffer[..len]).unwrap();
+    hello_frame.write(&mut stream).unwrap();
 
     std::thread::sleep(Duration::from_millis(50));
 
-    let hello_response = stream.read(&mut hello_buffer).unwrap();
+    let mut buffer = vec![0; connection.preamble_len()];
+    stream.read_exact(&mut buffer).unwrap();
 
-    println!("Data: {:02X?}", &hello_buffer[..hello_response]);
+    let preamble = connection.recv_preamble(&buffer).unwrap();
+    buffer.resize(preamble.data_and_epilogue_len(), 0);
 
-    let hello_response = Frame::parse(&hello_buffer[..hello_response]).unwrap();
+    stream.read_exact(&mut buffer).unwrap();
 
-    println!("Hello response: {:?}", hello_response);
+    let frame = Frame::parse(&preamble, &buffer).unwrap();
 
-    let hello = Hello::parse(hello_response.segments()[0]).unwrap();
-    println!("{hello:#?}");
+    let message = connection.recv(&frame).unwrap();
+
+    println!("Received message: {:?}", message);
 }

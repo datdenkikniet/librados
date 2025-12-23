@@ -10,6 +10,11 @@ pub struct Hello {
 }
 
 impl Hello {
+    pub fn write_to(&self, buffer: &mut Vec<u8>) {
+        buffer.push(self.entity_type.into());
+        self.peer_address.write(buffer);
+    }
+
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let entity_type = EntityType::try_from(data[0])
             .map_err(|_| format!("Unknown entity type {}", data[0]))?;
@@ -19,20 +24,6 @@ impl Hello {
             entity_type,
             peer_address: address,
         })
-    }
-
-    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
-        if buffer.is_empty() {
-            return Err(format!(
-                "Expected buffer of at least 1 byte, only got {}",
-                buffer.len()
-            ));
-        }
-
-        buffer[0] = self.entity_type.into();
-        let address = self.peer_address.write(&mut buffer[1..])?;
-
-        Ok(1 + address)
     }
 }
 
@@ -88,9 +79,7 @@ fn valid_hello() {
         0, 0, 0, 0, 0, 0, 0, 0,
     ];
 
-    let hello = Hello::parse(&data[..]).unwrap();
-
-    panic!("{hello:?}");
+    let _hello = Hello::parse(&data[..]).unwrap();
 }
 
 #[test]
@@ -109,12 +98,12 @@ fn round_trip() {
         },
     };
 
-    let mut hello_buffer = [0u8; 128];
-    let len = hello.write(&mut hello_buffer).unwrap();
+    let mut hello_buffer = Vec::new();
+    hello.write_to(&mut hello_buffer);
 
-    println!("{:?}", &hello_buffer[..len]);
+    println!("{:?}", hello_buffer);
 
-    let output_hello = Hello::parse(&hello_buffer[..len]).unwrap();
+    let output_hello = Hello::parse(&hello_buffer).unwrap();
 
     assert_eq!(output_hello.entity_type, hello.entity_type);
     assert_eq!(output_hello.peer_address, hello.peer_address);

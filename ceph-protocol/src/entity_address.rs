@@ -10,7 +10,7 @@ pub struct EntityAddress {
 }
 
 impl EntityAddress {
-    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
+    pub fn write(&self, buffer: &mut Vec<u8>) {
         let address_len = self
             .address
             .map(|v| {
@@ -30,49 +30,39 @@ impl EntityAddress {
             + 4 // address len
             + address_len;
 
-        if buffer.len() < len as usize {
-            return Err(format!(
-                "Expected buffer of at least {} bytes, got only {}",
-                len,
-                buffer.len()
-            ));
-        }
-
         // Address version for >= NAUTILUS
-        buffer[0] = 1;
+        buffer.push(1);
 
         // Version and compat version
-        buffer[1] = 1;
-        buffer[2] = 1;
+        buffer.push(1);
+        buffer.push(1);
 
         let data_len = len - 3 - 4;
-        buffer[3..7].copy_from_slice(&(data_len as u32).to_le_bytes());
-        buffer[7..11].copy_from_slice(&(self.ty as u32).to_le_bytes());
-        buffer[11..15].copy_from_slice(&self.nonce.to_le_bytes());
-        buffer[15..19].copy_from_slice(&address_len.to_le_bytes());
-
-        let (_, buffer) = buffer.split_at_mut(19);
+        buffer.extend_from_slice(&(data_len as u32).to_le_bytes());
+        buffer.extend_from_slice(&(self.ty as u32).to_le_bytes());
+        buffer.extend_from_slice(&self.nonce.to_le_bytes());
+        buffer.extend_from_slice(&address_len.to_le_bytes());
 
         match self.address {
             Some(SocketAddr::V4(v4_addr)) => {
-                buffer[0..2].copy_from_slice(&(AF_INET as u16).to_le_bytes());
-                buffer[2..4].copy_from_slice(&v4_addr.port().to_be_bytes());
-                buffer[4..8].copy_from_slice(v4_addr.ip().octets().as_slice());
+                buffer.extend_from_slice(&(AF_INET as u16).to_le_bytes());
+                buffer.extend_from_slice(&v4_addr.port().to_be_bytes());
+                buffer.extend_from_slice(v4_addr.ip().octets().as_slice());
             }
             Some(SocketAddr::V6(v6_addr)) => {
-                buffer[0..2].copy_from_slice(&(AF_INET6 as u16).to_le_bytes());
-                buffer[2..4].copy_from_slice(&v6_addr.port().to_le_bytes());
-                buffer[4..8].copy_from_slice(&v6_addr.flowinfo().to_le_bytes());
-                buffer[8..24].copy_from_slice(v6_addr.ip().octets().as_slice());
-                buffer[24..28].copy_from_slice(&v6_addr.scope_id().to_le_bytes());
+                buffer.extend_from_slice(&(AF_INET6 as u16).to_le_bytes());
+                buffer.extend_from_slice(&v6_addr.port().to_le_bytes());
+                buffer.extend_from_slice(&v6_addr.flowinfo().to_le_bytes());
+                buffer.extend_from_slice(v6_addr.ip().octets().as_slice());
+                buffer.extend_from_slice(&v6_addr.scope_id().to_le_bytes());
             }
             None => {}
         };
-
-        Ok(len as _)
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, String> {
+        // TODO: length check!
+
         let address_version = data[0];
         // 1 = has feature addr2 (is this msgr2?)
         assert_eq!(address_version, 1);
