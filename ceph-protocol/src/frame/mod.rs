@@ -5,6 +5,8 @@ mod preamble;
 pub use frame::Frame;
 pub use preamble::Tag;
 
+pub(crate) use preamble::Preamble;
+
 #[test]
 fn valid_frame() {
     let frame_data = &[
@@ -14,5 +16,8 @@ fn valid_frame() {
         00, 00, 105, 92, 102, 236, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
     ];
 
-    Frame::parse(&frame_data[..]).expect("Valid frame should be parseable");
+    let (preamble, frame_data) = frame_data.split_at(Preamble::LEN);
+    let preamble = Preamble::parse(preamble).unwrap();
+
+    Frame::parse(&preamble, frame_data).expect("Valid frame should be parseable");
 }

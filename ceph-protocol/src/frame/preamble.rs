@@ -1,5 +1,7 @@
 use std::num::NonZeroU8;
 
+use crate::frame::epilogue::Epilogue;
+
 /// The algorithm parameters used for the CRC
 /// calculated by Ceph.
 ///
@@ -81,29 +83,30 @@ impl TryFrom<u8> for Tag {
 
 #[derive(Debug)]
 pub struct Preamble {
-    pub tag: Tag,
-    pub segment_count: NonZeroU8,
-    pub segment_details: [SegmentDetail; 4],
-    pub flags: u8,
-    pub _reserved: u8,
+    pub(crate) tag: Tag,
+    pub(crate) segment_count: NonZeroU8,
+    pub(crate) segment_details: [SegmentDetail; 4],
+    pub(crate) flags: u8,
+    pub(crate) _reserved: u8,
 }
 
 impl Preamble {
     pub const LEN: usize = 32;
 
-    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
-        if buffer.len() < Self::LEN {
-            return Err(format!(
-                "Expected output buffer of at least {} bytes, got only {}",
-                Self::LEN,
-                buffer.len()
-            ));
-        }
+    pub fn data_and_epilogue_len(&self) -> usize {
+        let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
+        let epilogue_len = Epilogue::LEN;
 
-        let mut used = 2;
+        segment_data + epilogue_len
+    }
+
+    pub(crate) fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
+        let mut buffer = [0u8; Self::LEN];
+
         buffer[0] = self.tag as _;
         buffer[1] = self.segment_count.get();
 
+        let mut used = 2;
         for (idx, detail) in self.segment_details.iter().enumerate() {
             let start = used;
             let end = start + 6;
@@ -129,12 +132,14 @@ impl Preamble {
         assert_eq!(used, 28);
         let crc = CRC.checksum(&buffer[..used]);
         buffer[used..used + 4].copy_from_slice(&crc.to_le_bytes());
+
+        output.write_all(&buffer)?;
         used += 4;
 
         Ok(used)
     }
 
-    pub fn parse(input: &[u8]) -> Result<Self, String> {
+    pub(crate) fn parse(input: &[u8]) -> Result<Self, String> {
         if input.len() != Self::LEN {
             return Err(format!(
                 "Expected 32 bytes of preamble data, got {}",
@@ -188,13 +193,13 @@ impl Preamble {
         })
     }
 
-    pub fn segments(&self) -> &[SegmentDetail] {
+    pub(crate) fn segments(&self) -> &[SegmentDetail] {
         &self.segment_details[..self.segment_count.get() as usize]
     }
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub struct SegmentDetail {
+pub(crate) struct SegmentDetail {
     pub length: u32,
     pub alignment: u16,
 }
@@ -210,17 +215,9 @@ impl SegmentDetail {
         }
     }
 
-    pub fn write(&self, buffer: &mut [u8]) -> Result<usize, String> {
-        if buffer.len() < 6 {
-            return Err(format!(
-                "Expected buffer of at least 6 bytes, got only {}",
-                buffer.len()
-            ));
-        }
-
-        buffer[..4].copy_from_slice(&self.length.to_le_bytes());
-        buffer[4..6].copy_from_slice(&self.alignment.to_le_bytes());
-
+    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
+        output.write_all(&self.length.to_le_bytes())?;
+        output.write_all(&self.alignment.to_le_bytes())?;
         Ok(6)
     }
 
