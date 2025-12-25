@@ -91,17 +91,17 @@ pub struct Preamble {
 }
 
 impl Preamble {
-    pub const LEN: usize = 32;
+    pub const SERIALIZED_SIZE: usize = 32;
 
     pub fn data_and_epilogue_len(&self) -> usize {
         let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
-        let epilogue_len = Epilogue::LEN;
+        let epilogue_len = Epilogue::SERIALIZED_SIZE;
 
         segment_data + epilogue_len
     }
 
     pub(crate) fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        let mut buffer = [0u8; Self::LEN];
+        let mut buffer = [0u8; Self::SERIALIZED_SIZE];
 
         buffer[0] = self.tag as _;
         buffer[1] = self.segment_count.get();
@@ -140,7 +140,7 @@ impl Preamble {
     }
 
     pub(crate) fn parse(input: &[u8]) -> Result<Self, String> {
-        if input.len() != Self::LEN {
+        if input.len() != Self::SERIALIZED_SIZE {
             return Err(format!(
                 "Expected 32 bytes of preamble data, got {}",
                 input.len()

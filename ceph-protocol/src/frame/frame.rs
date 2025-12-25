@@ -20,7 +20,7 @@ const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 const EMPTY: &'static [u8] = &[];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Frame<'a> {
     tag: Tag,
     valid_segments: NonZeroU8,
