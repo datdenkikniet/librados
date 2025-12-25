@@ -1,6 +1,9 @@
 use crate::{
     frame::{Frame, Preamble, Tag},
-    messages::{Banner, ClientIdent, Features, Hello, Keepalive, auth::AuthRequest},
+    messages::{
+        Banner, ClientIdent, Features, Hello, Keepalive,
+        auth::{AuthDone, AuthRequest, AuthSignature},
+    },
 };
 
 enum State {
@@ -103,6 +106,8 @@ pub enum Message {
     Hello(Hello),
     ClientIdent(ClientIdent),
     AuthRequest(AuthRequest),
+    AuthDone(AuthDone),
+    AuthSignature(AuthSignature),
     Keepalive(Keepalive),
 }
 
@@ -124,6 +129,12 @@ impl From<AuthRequest> for Message {
     }
 }
 
+impl From<AuthSignature> for Message {
+    fn from(value: AuthSignature) -> Self {
+        Self::AuthSignature(value)
+    }
+}
+
 impl From<Keepalive> for Message {
     fn from(value: Keepalive) -> Self {
         Self::Keepalive(value)
@@ -137,6 +148,8 @@ impl Message {
             Message::ClientIdent(_) => Tag::ClientIdent,
             Message::AuthRequest(_) => Tag::AuthRequest,
             Message::Keepalive(_) => Tag::Keepalive2,
+            Message::AuthDone(_) => Tag::AuthDone,
+            Message::AuthSignature(_) => Tag::AuthSignature,
         }
     }
 
@@ -146,6 +159,8 @@ impl Message {
             Message::ClientIdent(client_ident) => client_ident.write_to(buffer),
             Message::AuthRequest(auth_request) => auth_request.write_to(buffer),
             Message::Keepalive(keepalive) => keepalive.write_to(buffer),
+            Message::AuthDone(_) => todo!(),
+            Message::AuthSignature(signature) => signature.write_to(buffer),
         }
     }
 
@@ -153,6 +168,8 @@ impl Message {
         match tag {
             Tag::Hello => Ok(Self::Hello(Hello::parse(&data)?)),
             Tag::ClientIdent => Ok(Self::ClientIdent(ClientIdent::parse(data)?)),
+            Tag::AuthDone => Ok(Self::AuthDone(AuthDone::parse(data)?)),
+            Tag::AuthSignature => Ok(Self::AuthSignature(AuthSignature::parse(data)?)),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }
