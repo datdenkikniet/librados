@@ -1,15 +1,14 @@
 use std::{
     io::{Read, Write},
     net::TcpStream,
-    time::Duration,
 };
 
 use ceph_protocol::{
     Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
-    frame::{Frame, Preamble},
+    frame::Frame,
     messages::{
         Banner, ClientIdent, Features, Hello, Keepalive, Timestamp,
-        auth::{AuthMethodNone, AuthRequest, ConMode},
+        auth::{AuthMethodNone, AuthRequest, AuthSignature, ConMode},
     },
 };
 
@@ -66,7 +65,9 @@ fn main() {
 
     println!("RX banner: {rx_banner:?}");
 
-    let rx_hello = recv(&mut connection, &mut stream);
+    let Message::Hello(rx_hello) = recv(&mut connection, &mut stream) else {
+        panic!("Expected Hello, got something else");
+    };
 
     println!("RX hello: {rx_hello:?}");
 
@@ -74,7 +75,7 @@ fn main() {
         entity_type: EntityType::Client,
         peer_address: EntityAddress {
             ty: EntityAddressType::Msgr2,
-            nonce: 1412321,
+            nonce: rx_hello.peer_address.nonce,
             address: stream.peer_addr().ok(),
         },
     };
@@ -92,4 +93,49 @@ fn main() {
 
     send(&mut connection, &mut stream, auth_req);
     let rx_auth = recv(&mut connection, &mut stream);
+
+    println!("Auth rx: {rx_auth:?}");
+
+    let rx_sig = recv(&mut connection, &mut stream);
+    println!("Signature rx: {rx_sig:?}");
+
+    send(
+        &mut connection,
+        &mut stream,
+        AuthSignature { sha256: [0u8; _] },
+    );
+
+    let target = EntityAddress {
+        ty: EntityAddressType::Msgr2,
+        nonce: 0,
+        address: stream.peer_addr().ok(),
+    };
+
+    let ident = ClientIdent {
+        addresses: vec![rx_hello.peer_address],
+        target,
+        gid: 14123,
+        global_seq: 112123,
+        supported_features: Features::empty(),
+        required_features: Features::empty(),
+        flags: 0,
+        cookie: 1337,
+    };
+
+    send(&mut connection, &mut stream, ident);
+    let ident_rx = recv(&mut connection, &mut stream);
+
+    println!("Ident RX: {:?}", ident_rx);
+
+    let keepalive = Keepalive {
+        timestamp: Timestamp {
+            tv_sec: 123,
+            tv_nsec: 456,
+        },
+    };
+
+    send(&mut connection, &mut stream, keepalive);
+    let rx_keepalive = recv(&mut connection, &mut stream);
+
+    println!("Keepalive RX: {rx_keepalive:?}");
 }

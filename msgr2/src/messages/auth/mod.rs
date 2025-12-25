@@ -1,6 +1,10 @@
+mod done;
 mod request;
+mod signature;
 
+pub use done::AuthDone;
 pub use request::{AuthMethodNone, AuthRequest, AuthRequestPayload};
+pub use signature::AuthSignature;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMethod {
