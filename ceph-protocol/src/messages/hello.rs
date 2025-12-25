@@ -10,7 +10,7 @@ pub struct Hello {
 }
 
 impl Hello {
-    pub fn write_to(&self, buffer: &mut Vec<u8>) {
+    pub(crate) fn write_to(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.entity_type.into());
         self.peer_address.write(buffer);
     }
@@ -18,7 +18,7 @@ impl Hello {
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let entity_type = EntityType::try_from(data[0])
             .map_err(|_| format!("Unknown entity type {}", data[0]))?;
-        let address = EntityAddress::parse(&data[1..])?;
+        let (_, address) = EntityAddress::parse(&data[1..])?;
 
         Ok(Self {
             entity_type,

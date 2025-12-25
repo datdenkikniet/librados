@@ -1,7 +1,6 @@
 use crate::{
-    Hello,
-    banner::{Banner, Features},
     frame::{Frame, Preamble, Tag},
+    messages::{Banner, ClientIdent, Features, Hello},
 };
 
 enum State {
@@ -38,7 +37,7 @@ impl Connection {
 
     pub fn preamble_len(&self) -> usize {
         // Fixed-size preamble for now
-        crate::frame::Preamble::LEN
+        crate::frame::Preamble::SERIALIZED_SIZE
     }
 
     pub fn recv_banner(&mut self, banner: &Banner) -> Result<(), String> {
@@ -61,7 +60,7 @@ impl Connection {
 
         if preamble_data.len() != self.preamble_len() {
             return Err(format!(
-                "Expected {} bytes of preamble len, got only {}",
+                "Expected {} bytes of preamble data, got {}",
                 self.preamble_len(),
                 preamble_data.len()
             ));
@@ -72,7 +71,7 @@ impl Connection {
         Ok(preamble)
     }
 
-    pub fn recv(&mut self, frame: &Frame) -> Result<Message, String> {
+    pub fn recv(&mut self, frame: Frame) -> Result<Message, String> {
         assert!(self.state.is_active());
         assert!(
             frame.segments().len() == 1,
@@ -101,6 +100,7 @@ impl Connection {
 #[derive(Debug, Clone)]
 pub enum Message {
     Hello(Hello),
+    ClientIdent(ClientIdent),
 }
 
 impl From<Hello> for Message {
@@ -109,23 +109,32 @@ impl From<Hello> for Message {
     }
 }
 
+impl From<ClientIdent> for Message {
+    fn from(value: ClientIdent) -> Self {
+        Self::ClientIdent(value)
+    }
+}
+
 impl Message {
     pub fn tag(&self) -> Tag {
         match self {
             Message::Hello(_) => Tag::Hello,
+            Message::ClientIdent(_) => Tag::ClientIdent,
         }
     }
 
     pub fn write_to(&self, buffer: &mut Vec<u8>) {
         match self {
             Message::Hello(hello) => hello.write_to(buffer),
+            Message::ClientIdent(client_ident) => client_ident.write_to(buffer),
         }
     }
 
     pub fn parse(tag: Tag, data: &[u8]) -> Result<Self, String> {
         match tag {
             Tag::Hello => Ok(Self::Hello(Hello::parse(&data)?)),
-            _ => todo!(),
+            Tag::ClientIdent => Ok(Self::ClientIdent(ClientIdent::parse(data)?)),
+            _ => todo!("Unsupported tag {tag:?}"),
         }
     }
 }

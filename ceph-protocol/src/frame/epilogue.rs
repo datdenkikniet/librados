@@ -4,7 +4,7 @@ pub struct Epilogue {
 }
 
 impl Epilogue {
-    pub const LEN: usize = 17;
+    pub const SERIALIZED_SIZE: usize = 17;
 
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
         output.write_all(&[self.late_flags])?;

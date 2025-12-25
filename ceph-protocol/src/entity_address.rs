@@ -60,21 +60,25 @@ impl EntityAddress {
         };
     }
 
-    pub fn parse(data: &[u8]) -> Result<Self, String> {
+    pub fn parse(data: &[u8]) -> Result<(usize, Self), String> {
         // TODO: length check!
 
+        let mut used = 1;
         let address_version = data[0];
         // 1 = has feature addr2 (is this msgr2?)
         assert_eq!(address_version, 1);
 
+        used += 1;
         let encoding_version = data[1];
         assert_eq!(encoding_version, 1);
 
+        used += 1;
         let encoding_compat = data[2];
         assert_eq!(encoding_compat, 1);
 
         let len = u32::from_le_bytes(data[3..7].try_into().unwrap());
-        assert_eq!(data[7..].len(), len as _);
+        assert!(data[7..].len() >= len as _);
+        used += 4 + len;
 
         let ty = u32::from_le_bytes(data[7..11].try_into().unwrap());
 
@@ -87,9 +91,7 @@ impl EntityAddress {
 
         let address = if address_len != 0 {
             let family = u16::from_le_bytes(data[19..21].try_into().unwrap());
-            let input = data.as_ptr_range();
             let data = &data[21..21 + (address_len - 2)];
-            assert_eq!(data.as_ptr_range().end, input.end);
 
             if family as i32 == AF_INET {
                 let port = u16::from_be_bytes(data[..2].try_into().unwrap());
@@ -112,7 +114,7 @@ impl EntityAddress {
             None
         };
 
-        Ok(Self { nonce, ty, address })
+        Ok((used as _, Self { nonce, ty, address }))
     }
 }
 

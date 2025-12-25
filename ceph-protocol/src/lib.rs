@@ -1,8 +1,7 @@
-pub mod banner;
 mod connection;
-pub mod entity_address;
+mod entity_address;
 pub mod frame;
-mod hello;
+pub mod messages;
 
-pub use connection::Connection;
-pub use hello::{EntityType, Hello};
+pub use connection::{Connection, Message};
+pub use entity_address::{EntityAddress, EntityAddressType};
