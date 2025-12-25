@@ -45,6 +45,12 @@ impl<'a> Frame<'a> {
         })
     }
 
+    pub fn to_vec(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        self.write(&mut output).unwrap();
+        output
+    }
+
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
         let segments = &self.segments[..self.valid_segments.get() as usize];
 

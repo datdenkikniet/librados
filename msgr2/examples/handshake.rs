@@ -5,10 +5,50 @@ use std::{
 };
 
 use ceph_protocol::{
-    Connection, EntityAddress, EntityAddressType, Message,
-    frame::Frame,
-    messages::{Banner, ClientIdent, EntityType, Features, Hello},
+    Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
+    frame::{Frame, Preamble},
+    messages::{
+        Banner, ClientIdent, Features, Hello, Keepalive, Timestamp,
+        auth::{AuthMethodNone, AuthRequest, ConMode},
+    },
 };
+
+fn send<T>(connection: &mut Connection, w: &mut impl std::io::Write, msg: T)
+where
+    T: Into<Message>,
+{
+    let frame = connection.send(msg);
+    let to_send = frame.to_vec();
+
+    println!(
+        "Sending: {:?}, {}, {}",
+        frame,
+        frame.segments()[0].len(),
+        to_send.len()
+    );
+
+    w.write_all(&to_send).unwrap();
+    w.flush().unwrap();
+}
+
+fn recv(connection: &mut Connection, r: &mut impl std::io::Read) -> Message {
+    let mut buffer = Vec::new();
+    buffer.resize(connection.preamble_len(), 0);
+    let len = r.read(&mut buffer).unwrap();
+    println!("Read {} bytes of preamble data.", len);
+
+    if len != connection.preamble_len() {
+        panic!("{:?}", &buffer[..len]);
+    }
+
+    let preamble = connection.recv_preamble(&buffer).unwrap();
+    buffer.resize(preamble.data_and_epilogue_len(), 0);
+    r.read(&mut buffer).unwrap();
+
+    let frame = Frame::parse(&preamble, &buffer).unwrap();
+
+    connection.recv(frame).unwrap()
+}
 
 fn main() {
     let mut stream = TcpStream::connect("10.0.1.227:3300").unwrap();
@@ -19,7 +59,6 @@ fn main() {
     connection.banner().write(&mut banner_buffer);
 
     stream.write_all(&banner_buffer).unwrap();
-
     stream.read_exact(&mut banner_buffer).unwrap();
 
     let rx_banner = Banner::parse(&banner_buffer).unwrap();
@@ -27,62 +66,30 @@ fn main() {
 
     println!("RX banner: {rx_banner:?}");
 
-    let peer_address = EntityAddress {
-        ty: EntityAddressType::Msgr2,
-        nonce: 69,
-        address: stream.peer_addr().ok(),
-    };
+    let rx_hello = recv(&mut connection, &mut stream);
+
+    println!("RX hello: {rx_hello:?}");
 
     let hello = Hello {
         entity_type: EntityType::Client,
-        peer_address: peer_address.clone(),
+        peer_address: EntityAddress {
+            ty: EntityAddressType::Msgr2,
+            nonce: 1412321,
+            address: stream.peer_addr().ok(),
+        },
     };
 
-    let hello_frame = connection.send(hello);
-    hello_frame.write(&mut stream).unwrap();
+    send(&mut connection, &mut stream, hello.clone());
 
-    std::thread::sleep(Duration::from_millis(50));
-
-    let mut buffer = Vec::new();
-
-    buffer.resize(connection.preamble_len(), 0);
-    stream.read_exact(&mut buffer).unwrap();
-
-    let preamble = connection.recv_preamble(&buffer).unwrap();
-    buffer.resize(preamble.data_and_epilogue_len(), 0);
-    stream.read_exact(&mut buffer).unwrap();
-    let frame = Frame::parse(&preamble, &buffer).unwrap();
-
-    let Message::Hello(hello) = connection.recv(frame).unwrap() else {
-        panic!("Expected hello");
+    let method = AuthMethodNone {
+        name: EntityName {
+            ty: EntityType::Client,
+            name: "client.1332".into(),
+        },
+        global_id: 1332,
     };
+    let auth_req = AuthRequest::new(method, vec![ConMode::Crc]);
 
-    println!("Received message: {:?}", hello);
-
-    let addresses = vec![hello.peer_address];
-    let client_ident = ClientIdent {
-        addresses,
-        target: peer_address.clone(),
-        gid: 13123,
-        global_seq: 123,
-        supported_features: Features::empty(),
-        required_features: Features::empty(),
-        flags: 0,
-        cookie: 4123,
-    };
-
-    let frame = connection.send(client_ident);
-    frame.write(&mut stream).unwrap();
-
-    buffer.resize(connection.preamble_len(), 0);
-    stream.read_exact(&mut buffer).unwrap();
-
-    let preamble = connection.recv_preamble(&buffer).unwrap();
-    buffer.resize(preamble.data_and_epilogue_len(), 0);
-    stream.read_exact(&mut buffer).unwrap();
-    let frame = Frame::parse(&preamble, &buffer).unwrap();
-
-    let _test = connection.recv(frame).unwrap();
-
-    loop {}
+    send(&mut connection, &mut stream, auth_req);
+    let rx_auth = recv(&mut connection, &mut stream);
 }
