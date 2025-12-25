@@ -3,9 +3,7 @@ mod frame;
 mod preamble;
 
 pub use frame::Frame;
-pub use preamble::Tag;
-
-pub(crate) use preamble::Preamble;
+pub use preamble::{Preamble, Tag};
 
 #[test]
 fn valid_frame() {

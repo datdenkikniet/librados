@@ -1,6 +1,6 @@
 use crate::{
     frame::{Frame, Preamble, Tag},
-    messages::{Banner, ClientIdent, Features, Hello},
+    messages::{Banner, ClientIdent, Features, Hello, Keepalive, auth::AuthRequest},
 };
 
 enum State {
@@ -55,6 +55,7 @@ impl Connection {
 
         Ok(())
     }
+
     pub fn recv_preamble(&mut self, preamble_data: &[u8]) -> Result<Preamble, String> {
         assert!(self.state.is_active());
 
@@ -101,6 +102,8 @@ impl Connection {
 pub enum Message {
     Hello(Hello),
     ClientIdent(ClientIdent),
+    AuthRequest(AuthRequest),
+    Keepalive(Keepalive),
 }
 
 impl From<Hello> for Message {
@@ -115,11 +118,25 @@ impl From<ClientIdent> for Message {
     }
 }
 
+impl From<AuthRequest> for Message {
+    fn from(value: AuthRequest) -> Self {
+        Self::AuthRequest(value)
+    }
+}
+
+impl From<Keepalive> for Message {
+    fn from(value: Keepalive) -> Self {
+        Self::Keepalive(value)
+    }
+}
+
 impl Message {
     pub fn tag(&self) -> Tag {
         match self {
             Message::Hello(_) => Tag::Hello,
             Message::ClientIdent(_) => Tag::ClientIdent,
+            Message::AuthRequest(_) => Tag::AuthRequest,
+            Message::Keepalive(_) => Tag::Keepalive2,
         }
     }
 
@@ -127,6 +144,8 @@ impl Message {
         match self {
             Message::Hello(hello) => hello.write_to(buffer),
             Message::ClientIdent(client_ident) => client_ident.write_to(buffer),
+            Message::AuthRequest(auth_request) => auth_request.write_to(buffer),
+            Message::Keepalive(keepalive) => keepalive.write_to(buffer),
         }
     }
 

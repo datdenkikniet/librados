@@ -1,10 +1,13 @@
+pub mod auth;
 mod banner;
 mod client_ident;
 mod hello;
+mod keepalive;
 
 pub use banner::Banner;
 pub use client_ident::ClientIdent;
-pub use hello::{EntityType, Hello};
+pub use hello::Hello;
+pub use keepalive::{Keepalive, KeepaliveAck};
 
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
@@ -43,5 +46,29 @@ impl Features {
         } else {
             self.0 |= FEATURE_COMPRESSION
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Timestamp {
+    pub tv_sec: u32,
+    pub tv_nsec: u32,
+}
+
+impl Timestamp {
+    pub fn write_to(&self, buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&self.tv_sec.to_le_bytes());
+        buffer.extend_from_slice(&self.tv_nsec.to_le_bytes());
+    }
+
+    pub fn parse(buffer: &mut [u8]) -> Option<(Self, usize)> {
+        if buffer.len() < 8 {
+            return None;
+        }
+
+        let tv_sec = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
+        let tv_nsec = u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
+
+        Some((Self { tv_sec, tv_nsec }, 8))
     }
 }

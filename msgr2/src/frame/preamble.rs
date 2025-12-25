@@ -26,7 +26,7 @@ pub enum Tag {
     Hello = 1,
     AuthRequest = 2,
     AuthBadMethod = 3,
-    AuthReployMore = 4,
+    AuthReplyMore = 4,
     AuthRequestMore = 5,
     AuthDone = 6,
     AuthSignature = 7,
@@ -55,7 +55,7 @@ impl TryFrom<u8> for Tag {
             1 => Self::Hello,
             2 => Self::AuthRequest,
             3 => Self::AuthBadMethod,
-            4 => Self::AuthReployMore,
+            4 => Self::AuthReplyMore,
             5 => Self::AuthRequestMore,
             6 => Self::AuthDone,
             7 => Self::AuthSignature,
@@ -100,7 +100,7 @@ impl Preamble {
         segment_data + epilogue_len
     }
 
-    pub(crate) fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
+    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
         let mut buffer = [0u8; Self::SERIALIZED_SIZE];
 
         buffer[0] = self.tag as _;
@@ -139,7 +139,7 @@ impl Preamble {
         Ok(used)
     }
 
-    pub(crate) fn parse(input: &[u8]) -> Result<Self, String> {
+    pub fn parse(input: &[u8]) -> Result<Self, String> {
         if input.len() != Self::SERIALIZED_SIZE {
             return Err(format!(
                 "Expected 32 bytes of preamble data, got {}",

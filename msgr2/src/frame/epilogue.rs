@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct Epilogue {
     pub late_flags: u8,
     pub crcs: [u32; 4],
