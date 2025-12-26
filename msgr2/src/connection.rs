@@ -103,59 +103,35 @@ impl Connection {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    Hello(Hello),
-    ClientIdent(ClientIdent),
-    ServerIdent(ServerIdent),
-    AuthRequest(AuthRequest),
-    AuthDone(AuthDone),
-    AuthSignature(AuthSignature),
-    Keepalive(Keepalive),
-    KeepaliveAck(KeepaliveAck),
-    IdentMissingFeatures(IdentMissingFeatures),
-}
+macro_rules ! message {
+    ($($name:ident),*$(,)?) => {
+        #[derive(Debug, Clone)]
+        pub enum Message {
+            $(
+                $name($name),
+            )*
+        }
 
-impl From<Hello> for Message {
-    fn from(value: Hello) -> Self {
-        Self::Hello(value)
+        $(
+            impl From<$name> for Message {
+                fn from(value: $name) -> Self {
+                    Self::$name(value)
+                }
+            }
+        )*
     }
 }
 
-impl From<ClientIdent> for Message {
-    fn from(value: ClientIdent) -> Self {
-        Self::ClientIdent(value)
-    }
-}
-
-impl From<AuthRequest> for Message {
-    fn from(value: AuthRequest) -> Self {
-        Self::AuthRequest(value)
-    }
-}
-
-impl From<AuthSignature> for Message {
-    fn from(value: AuthSignature) -> Self {
-        Self::AuthSignature(value)
-    }
-}
-
-impl From<Keepalive> for Message {
-    fn from(value: Keepalive) -> Self {
-        Self::Keepalive(value)
-    }
-}
-
-impl From<KeepaliveAck> for Message {
-    fn from(value: KeepaliveAck) -> Self {
-        Self::KeepaliveAck(value)
-    }
-}
-
-impl From<IdentMissingFeatures> for Message {
-    fn from(value: IdentMissingFeatures) -> Self {
-        Self::IdentMissingFeatures(value)
-    }
+message! {
+    Hello,
+    ClientIdent,
+    ServerIdent,
+    AuthRequest,
+    AuthDone,
+    AuthSignature,
+    Keepalive,
+    KeepaliveAck,
+    IdentMissingFeatures,
 }
 
 impl Message {
@@ -201,7 +177,7 @@ impl Message {
             )),
             Tag::ServerIdent => Ok(Self::ServerIdent(ServerIdent::parse(data)?)),
             Tag::Keepalive2Ack => Ok(Self::KeepaliveAck(
-                KeepaliveAck::parse(data).ok_or("Incorrect amoutn of data for keep alive ack")?,
+                KeepaliveAck::parse(data).ok_or("Incorrect amount of data for keep alive ack")?,
             )),
             _ => todo!("Unsupported tag {tag:?}"),
         }
