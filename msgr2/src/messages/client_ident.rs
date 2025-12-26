@@ -1,4 +1,4 @@
-use crate::{entity_address::EntityAddress, messages::Features};
+use crate::{EncodeExt, entity_address::EntityAddress, messages::Features};
 
 #[derive(Clone, Debug)]
 pub struct ClientIdent {
@@ -20,10 +20,10 @@ impl ClientIdent {
         buffer.extend_from_slice(&addresses.to_le_bytes());
 
         for address in &self.addresses {
-            address.write(buffer);
+            address.encode(buffer);
         }
 
-        self.target.write(buffer);
+        self.target.encode(buffer);
 
         buffer.extend_from_slice(&self.gid.to_le_bytes());
         buffer.extend_from_slice(&self.global_seq.to_le_bytes());
