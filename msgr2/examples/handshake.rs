@@ -4,10 +4,10 @@ use std::{
 };
 
 use ceph_protocol::{
-    Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
+    CephFeatureSet, Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
     frame::Frame,
     messages::{
-        Banner, ClientIdent, Hello, Keepalive, MsgrFeatures, Timestamp,
+        Banner, ClientIdent, Hello, Keepalive, Timestamp,
         auth::{AuthMethodNone, AuthRequest, AuthSignature, ConMode},
     },
 };
@@ -116,14 +116,22 @@ fn main() {
         target,
         gid: 14123,
         global_seq: 112123,
-        supported_features: 0,
-        required_features: 0,
+        supported_features: CephFeatureSet::ALL,
+        required_features: CephFeatureSet::ALL,
         flags: 0,
         cookie: 1337,
     };
 
     send(&mut connection, &mut stream, ident);
-    let ident_rx = recv(&mut connection, &mut stream);
+    let ident_rx = match recv(&mut connection, &mut stream) {
+        Message::ServerIdent(id) => id,
+        Message::IdentMissingFeatures(i) => {
+            panic!("Missing features: {}, {:X?}", i.features, i);
+        }
+        m => {
+            panic!("Expected ServerIdent, got {m:?}")
+        }
+    };
 
     println!("Ident RX: {:08X?}", ident_rx);
 

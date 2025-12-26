@@ -1,8 +1,9 @@
 use crate::{
-    EncodeExt,
+    Encode,
     frame::{Frame, Preamble, Tag},
     messages::{
-        Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, MsgrFeatures,
+        Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
+        ServerIdent,
         auth::{AuthDone, AuthRequest, AuthSignature},
     },
 };
@@ -106,10 +107,12 @@ impl Connection {
 pub enum Message {
     Hello(Hello),
     ClientIdent(ClientIdent),
+    ServerIdent(ServerIdent),
     AuthRequest(AuthRequest),
     AuthDone(AuthDone),
     AuthSignature(AuthSignature),
     Keepalive(Keepalive),
+    KeepaliveAck(KeepaliveAck),
     IdentMissingFeatures(IdentMissingFeatures),
 }
 
@@ -143,6 +146,12 @@ impl From<Keepalive> for Message {
     }
 }
 
+impl From<KeepaliveAck> for Message {
+    fn from(value: KeepaliveAck) -> Self {
+        Self::KeepaliveAck(value)
+    }
+}
+
 impl From<IdentMissingFeatures> for Message {
     fn from(value: IdentMissingFeatures) -> Self {
         Self::IdentMissingFeatures(value)
@@ -159,6 +168,8 @@ impl Message {
             Message::AuthDone(_) => Tag::AuthDone,
             Message::AuthSignature(_) => Tag::AuthSignature,
             Message::IdentMissingFeatures(_) => Tag::IdentMissingFeatures,
+            Message::ServerIdent(_) => Tag::ServerIdent,
+            Message::KeepaliveAck(_) => Tag::Keepalive2Ack,
         }
     }
 
@@ -173,6 +184,8 @@ impl Message {
             Message::IdentMissingFeatures(ident_missing_features) => {
                 ident_missing_features.encode(buffer)
             }
+            Message::ServerIdent(_) => todo!(),
+            Message::KeepaliveAck(_) => todo!(),
         }
     }
 
@@ -185,6 +198,10 @@ impl Message {
             Tag::IdentMissingFeatures => Ok(Self::IdentMissingFeatures(
                 IdentMissingFeatures::parse(data)
                     .ok_or("Incorrect amount of data for ident missing features")?,
+            )),
+            Tag::ServerIdent => Ok(Self::ServerIdent(ServerIdent::parse(data)?)),
+            Tag::Keepalive2Ack => Ok(Self::KeepaliveAck(
+                KeepaliveAck::parse(data).ok_or("Incorrect amoutn of data for keep alive ack")?,
             )),
             _ => todo!("Unsupported tag {tag:?}"),
         }

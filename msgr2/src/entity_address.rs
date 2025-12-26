@@ -2,7 +2,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use nix::libc::{AF_INET, AF_INET6};
 
-use crate::EncodeExt;
+use crate::Encode;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityAddress {
@@ -11,7 +11,7 @@ pub struct EntityAddress {
     pub address: Option<SocketAddr>,
 }
 
-impl EncodeExt for EntityAddress {
+impl Encode for EntityAddress {
     fn encode(&self, buffer: &mut Vec<u8>) {
         let address_len = self
             .address

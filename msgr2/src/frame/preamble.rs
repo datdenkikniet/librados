@@ -225,6 +225,7 @@ impl SegmentDetail {
         self.length as _
     }
 
+    #[expect(unused)]
     pub fn alignment(&self) -> usize {
         self.alignment as _
     }

@@ -1,5 +1,5 @@
 use crate::{
-    EncodeExt, EntityName,
+    Encode, EntityName,
     messages::auth::{AuthMethod, ConMode},
 };
 
@@ -34,7 +34,7 @@ impl AuthRequest {
     }
 }
 
-impl EncodeExt for AuthRequest {
+impl Encode for AuthRequest {
     fn encode(&self, buffer: &mut Vec<u8>) {
         (u8::from(self.method) as u32).encode(buffer);
         self.preferred_modes.encode(buffer);

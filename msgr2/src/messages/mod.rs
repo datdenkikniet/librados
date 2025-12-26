@@ -4,14 +4,16 @@ mod client_ident;
 mod hello;
 mod ident_missing_features;
 mod keepalive;
+mod server_ident;
 
 pub use banner::Banner;
 pub use client_ident::ClientIdent;
 pub use hello::Hello;
 pub use ident_missing_features::IdentMissingFeatures;
 pub use keepalive::{Keepalive, KeepaliveAck};
+pub use server_ident::ServerIdent;
 
-use crate::EncodeExt;
+use crate::Encode;
 
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
@@ -49,7 +51,7 @@ impl MsgrFeatures {
     }
 }
 
-impl EncodeExt for MsgrFeatures {
+impl Encode for MsgrFeatures {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.0.encode(buffer);
     }
@@ -61,7 +63,7 @@ pub struct Timestamp {
     pub tv_nsec: u32,
 }
 
-impl EncodeExt for Timestamp {
+impl Encode for Timestamp {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.tv_sec.encode(buffer);
         self.tv_nsec.encode(buffer);
@@ -69,7 +71,7 @@ impl EncodeExt for Timestamp {
 }
 
 impl Timestamp {
-    pub fn parse(buffer: &mut [u8]) -> Option<(Self, usize)> {
+    pub fn parse(buffer: &[u8]) -> Option<(Self, usize)> {
         if buffer.len() < 8 {
             return None;
         }
