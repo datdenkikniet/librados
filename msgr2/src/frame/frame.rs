@@ -151,18 +151,26 @@ impl<'a> Frame<'a> {
 
         let mut crcs = [0; 4];
 
-        match preamble.revision {
+        let completed = match preamble.revision {
             Msgr2Revision::V2_0 => {
-                Epilogue::parse(trailer, &mut crcs)?;
+                let epilogue = Epilogue::parse(trailer, &mut crcs)?;
+                epilogue.is_completed(preamble.revision)
             }
             Msgr2Revision::V2_1 => {
                 crcs[0] = crc_segment1;
 
                 if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
-                    Epilogue::parse(trailer, &mut crcs[1..])?;
+                    let epilogue = Epilogue::parse(trailer, &mut crcs[1..])?;
+                    epilogue.is_completed(preamble.revision)
+                } else {
+                    true
                 }
             }
         };
+
+        if !completed {
+            return Err("Epilogue status did not indicate correct completion".into());
+        }
 
         for (idx, crc) in crcs.iter().copied().enumerate() {
             if idx < preamble.segment_count.get() as usize {
