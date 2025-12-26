@@ -1,14 +1,14 @@
-use crate::messages::Features;
+use crate::messages::MsgrFeatures;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Banner {
-    supported_features: Features,
-    required_features: Features,
+    supported_features: MsgrFeatures,
+    required_features: MsgrFeatures,
 }
 
 impl Default for Banner {
     fn default() -> Self {
-        let features = Features(0x0);
+        let features = MsgrFeatures(0x0);
 
         Self {
             supported_features: features,
@@ -22,7 +22,7 @@ const HEADER: &'static [u8] = b"ceph v2\n";
 impl Banner {
     pub const SERIALIZED_SIZE: usize = 26;
 
-    pub fn new(supported_features: Features, required_features: Features) -> Self {
+    pub fn new(supported_features: MsgrFeatures, required_features: MsgrFeatures) -> Self {
         Self {
             supported_features,
             required_features,
@@ -46,13 +46,13 @@ impl Banner {
             .split_first_chunk::<8>()
             .expect("8 bytes of supported feature data");
 
-        let supported_features = Features(u64::from_le_bytes(*supported_features));
+        let supported_features = MsgrFeatures(u64::from_le_bytes(*supported_features));
 
         let (required_features, _) = data
             .split_first_chunk::<8>()
             .expect("8 bytes of required feature data");
 
-        let required_features = Features(u64::from_le_bytes(*required_features));
+        let required_features = MsgrFeatures(u64::from_le_bytes(*required_features));
 
         Ok(Self {
             required_features,
@@ -67,11 +67,11 @@ impl Banner {
         output[18..26].copy_from_slice(&self.required_features.0.to_le_bytes());
     }
 
-    pub fn supported(&self) -> &Features {
+    pub fn supported(&self) -> &MsgrFeatures {
         &self.supported_features
     }
 
-    pub fn required(&self) -> &Features {
+    pub fn required(&self) -> &MsgrFeatures {
         &self.required_features
     }
 }

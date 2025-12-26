@@ -1,4 +1,4 @@
-use crate::{EncodeExt, entity_address::EntityAddress, messages::Features};
+use crate::{EncodeExt, entity_address::EntityAddress, messages::MsgrFeatures};
 
 #[derive(Clone, Debug)]
 pub struct ClientIdent {
@@ -6,8 +6,10 @@ pub struct ClientIdent {
     pub target: EntityAddress,
     pub gid: i64,
     pub global_seq: u64,
-    pub supported_features: Features,
-    pub required_features: Features,
+    /// The supported `ceph` features. (_Not_ `msgr2` features).
+    pub supported_features: u64,
+    /// The required `ceph` features. (_Not_ `msgr2` features).
+    pub required_features: u64,
     pub flags: u64,
     pub cookie: u64,
 }
@@ -72,8 +74,8 @@ impl ClientIdent {
             target,
             gid,
             global_seq,
-            supported_features: Features(supported_features),
-            required_features: Features(required_features),
+            supported_features,
+            required_features,
             flags,
             cookie,
         })

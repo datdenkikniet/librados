@@ -1,3 +1,4 @@
+mod ceph_features;
 mod connection;
 mod encode;
 mod entity_address;
@@ -6,6 +7,7 @@ mod entity_type;
 pub mod frame;
 pub mod messages;
 
+pub use ceph_features::CephFeatures;
 pub use connection::{Connection, Message};
 pub use encode::EncodeExt;
 pub use entity_address::{EntityAddress, EntityAddressType};
