@@ -1,6 +1,6 @@
 use std::num::NonZeroU8;
 
-use crate::frame::epilogue::Epilogue;
+use crate::frame::{Msgr2Revision, epilogue::Epilogue};
 
 /// The algorithm parameters used for the CRC
 /// calculated by Ceph.
@@ -83,6 +83,7 @@ impl TryFrom<u8> for Tag {
 
 #[derive(Debug)]
 pub struct Preamble {
+    pub(crate) revision: Msgr2Revision,
     pub(crate) tag: Tag,
     pub(crate) segment_count: NonZeroU8,
     pub(crate) segment_details: [SegmentDetail; 4],
@@ -95,7 +96,16 @@ impl Preamble {
 
     pub fn data_and_epilogue_len(&self) -> usize {
         let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
-        let epilogue_len = Epilogue::SERIALIZED_SIZE;
+
+        let epilogue_len = match self.revision {
+            Msgr2Revision::V2_0 => Epilogue::SERIALIZED_SIZE_V2_0,
+            Msgr2Revision::V2_1 => {
+                let first_segment_crc = if self.segments()[0].len() == 0 { 4 } else { 0 };
+                let epilogue = if self.segments().len() > 1 { 13 } else { 0 };
+
+                first_segment_crc + epilogue
+            }
+        };
 
         segment_data + epilogue_len
     }
@@ -139,7 +149,7 @@ impl Preamble {
         Ok(used)
     }
 
-    pub fn parse(input: &[u8]) -> Result<Self, String> {
+    pub fn parse(input: &[u8], revision: Msgr2Revision) -> Result<Self, String> {
         if input.len() != Self::SERIALIZED_SIZE {
             return Err(format!(
                 "Expected 32 bytes of preamble data, got {}",
@@ -185,6 +195,7 @@ impl Preamble {
         }
 
         Ok(Self {
+            revision,
             tag,
             segment_count,
             segment_details,

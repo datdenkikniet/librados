@@ -1,6 +1,6 @@
 use crate::{
     Encode,
-    frame::{Frame, Preamble, Tag},
+    frame::{Frame, Msgr2Revision, Preamble, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -25,6 +25,7 @@ impl State {
 
 pub struct Connection {
     state: State,
+    revision: Msgr2Revision,
     buffer: Vec<u8>,
 }
 
@@ -32,12 +33,17 @@ impl Connection {
     pub fn new() -> Self {
         Self {
             state: State::Inactive,
+            revision: Msgr2Revision::V2_0,
             buffer: Vec::new(),
         }
     }
 
     pub fn banner(&self) -> Banner {
         Banner::new(MsgrFeatures::empty(), MsgrFeatures::empty())
+    }
+
+    pub fn msgr2_revision(&self) -> Msgr2Revision {
+        self.revision
     }
 
     pub fn preamble_len(&self) -> usize {
@@ -72,7 +78,7 @@ impl Connection {
             ));
         }
 
-        let preamble = Preamble::parse(preamble_data)?;
+        let preamble = Preamble::parse(preamble_data, self.revision)?;
 
         Ok(preamble)
     }
@@ -99,7 +105,7 @@ impl Connection {
         self.buffer.clear();
         message.write_to(&mut self.buffer);
 
-        Frame::new(message.tag(), &[&self.buffer]).unwrap()
+        Frame::new(message.tag(), &[&self.buffer], self.revision).unwrap()
     }
 }
 
