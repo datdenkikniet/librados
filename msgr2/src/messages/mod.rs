@@ -2,11 +2,13 @@ pub mod auth;
 mod banner;
 mod client_ident;
 mod hello;
+mod ident_missing_features;
 mod keepalive;
 
 pub use banner::Banner;
 pub use client_ident::ClientIdent;
 pub use hello::Hello;
+pub use ident_missing_features::IdentMissingFeatures;
 pub use keepalive::{Keepalive, KeepaliveAck};
 
 use crate::EncodeExt;
@@ -15,9 +17,9 @@ const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Features(u64);
+pub struct MsgrFeatures(u64);
 
-impl Features {
+impl MsgrFeatures {
     pub const fn empty() -> Self {
         Self(0)
     }
@@ -47,7 +49,7 @@ impl Features {
     }
 }
 
-impl EncodeExt for Features {
+impl EncodeExt for MsgrFeatures {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.0.encode(buffer);
     }

@@ -7,7 +7,7 @@ use ceph_protocol::{
     Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
     frame::Frame,
     messages::{
-        Banner, ClientIdent, Features, Hello, Keepalive, Timestamp,
+        Banner, ClientIdent, Hello, Keepalive, MsgrFeatures, Timestamp,
         auth::{AuthMethodNone, AuthRequest, AuthSignature, ConMode},
     },
 };
@@ -116,8 +116,8 @@ fn main() {
         target,
         gid: 14123,
         global_seq: 112123,
-        supported_features: Features::empty(),
-        required_features: Features::empty(),
+        supported_features: 0,
+        required_features: 0,
         flags: 0,
         cookie: 1337,
     };
@@ -125,7 +125,7 @@ fn main() {
     send(&mut connection, &mut stream, ident);
     let ident_rx = recv(&mut connection, &mut stream);
 
-    println!("Ident RX: {:?}", ident_rx);
+    println!("Ident RX: {:08X?}", ident_rx);
 
     let keepalive = Keepalive {
         timestamp: Timestamp {

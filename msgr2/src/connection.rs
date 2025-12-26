@@ -2,7 +2,7 @@ use crate::{
     EncodeExt,
     frame::{Frame, Preamble, Tag},
     messages::{
-        Banner, ClientIdent, Features, Hello, Keepalive,
+        Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, MsgrFeatures,
         auth::{AuthDone, AuthRequest, AuthSignature},
     },
 };
@@ -36,7 +36,7 @@ impl Connection {
     }
 
     pub fn banner(&self) -> Banner {
-        Banner::new(Features::empty(), Features::empty())
+        Banner::new(MsgrFeatures::empty(), MsgrFeatures::empty())
     }
 
     pub fn preamble_len(&self) -> usize {
@@ -110,6 +110,7 @@ pub enum Message {
     AuthDone(AuthDone),
     AuthSignature(AuthSignature),
     Keepalive(Keepalive),
+    IdentMissingFeatures(IdentMissingFeatures),
 }
 
 impl From<Hello> for Message {
@@ -142,6 +143,12 @@ impl From<Keepalive> for Message {
     }
 }
 
+impl From<IdentMissingFeatures> for Message {
+    fn from(value: IdentMissingFeatures) -> Self {
+        Self::IdentMissingFeatures(value)
+    }
+}
+
 impl Message {
     pub fn tag(&self) -> Tag {
         match self {
@@ -151,6 +158,7 @@ impl Message {
             Message::Keepalive(_) => Tag::Keepalive2,
             Message::AuthDone(_) => Tag::AuthDone,
             Message::AuthSignature(_) => Tag::AuthSignature,
+            Message::IdentMissingFeatures(_) => Tag::IdentMissingFeatures,
         }
     }
 
@@ -162,6 +170,9 @@ impl Message {
             Message::Keepalive(keepalive) => keepalive.encode(buffer),
             Message::AuthDone(_) => todo!(),
             Message::AuthSignature(signature) => signature.encode(buffer),
+            Message::IdentMissingFeatures(ident_missing_features) => {
+                ident_missing_features.encode(buffer)
+            }
         }
     }
 
@@ -171,6 +182,10 @@ impl Message {
             Tag::ClientIdent => Ok(Self::ClientIdent(ClientIdent::parse(data)?)),
             Tag::AuthDone => Ok(Self::AuthDone(AuthDone::parse(data)?)),
             Tag::AuthSignature => Ok(Self::AuthSignature(AuthSignature::parse(data)?)),
+            Tag::IdentMissingFeatures => Ok(Self::IdentMissingFeatures(
+                IdentMissingFeatures::parse(data)
+                    .ok_or("Incorrect amount of data for ident missing features")?,
+            )),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }
