@@ -1,3 +1,5 @@
+use crate::frame::Msgr2Revision;
+
 #[derive(Debug, Clone)]
 pub struct Epilogue<'a> {
     pub late_flags: u8,
@@ -34,5 +36,12 @@ impl<'a> Epilogue<'a> {
         }
 
         Ok(Self { late_flags, crcs })
+    }
+
+    pub fn is_completed(&self, revision: Msgr2Revision) -> bool {
+        match revision {
+            Msgr2Revision::V2_0 => self.late_flags & 0x1 == 0x0,
+            Msgr2Revision::V2_1 => self.late_flags & 0xF == 0xE,
+        }
     }
 }
