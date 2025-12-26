@@ -9,6 +9,8 @@ pub use client_ident::ClientIdent;
 pub use hello::Hello;
 pub use keepalive::{Keepalive, KeepaliveAck};
 
+use crate::EncodeExt;
+
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
 
@@ -18,10 +20,6 @@ pub struct Features(u64);
 impl Features {
     pub const fn empty() -> Self {
         Self(0)
-    }
-
-    pub const fn get(&self) -> u64 {
-        self.0
     }
 
     pub const fn revision_21(&self) -> bool {
@@ -49,18 +47,26 @@ impl Features {
     }
 }
 
+impl EncodeExt for Features {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        self.0.encode(buffer);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Timestamp {
     pub tv_sec: u32,
     pub tv_nsec: u32,
 }
 
-impl Timestamp {
-    pub fn write_to(&self, buffer: &mut Vec<u8>) {
-        buffer.extend_from_slice(&self.tv_sec.to_le_bytes());
-        buffer.extend_from_slice(&self.tv_nsec.to_le_bytes());
+impl EncodeExt for Timestamp {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        self.tv_sec.encode(buffer);
+        self.tv_nsec.encode(buffer);
     }
+}
 
+impl Timestamp {
     pub fn parse(buffer: &mut [u8]) -> Option<(Self, usize)> {
         if buffer.len() < 8 {
             return None;

@@ -33,30 +33,33 @@ impl EncodeExt for EntityAddress {
             + address_len;
 
         // Address version for >= NAUTILUS
-        buffer.push(1);
-
         // Version and compat version
-        buffer.push(1);
-        buffer.push(1);
+        [1u8, 1, 1].encode(buffer);
 
         let data_len = len - 3 - 4;
-        buffer.extend_from_slice(&(data_len as u32).to_le_bytes());
-        buffer.extend_from_slice(&(self.ty as u32).to_le_bytes());
-        buffer.extend_from_slice(&self.nonce.to_le_bytes());
-        buffer.extend_from_slice(&address_len.to_le_bytes());
+        data_len.encode(buffer);
+        (self.ty as u32).encode(buffer);
+        self.nonce.encode(buffer);
+        address_len.encode(buffer);
 
         match self.address {
             Some(SocketAddr::V4(v4_addr)) => {
-                buffer.extend_from_slice(&(AF_INET as u16).to_le_bytes());
+                (AF_INET as u16).encode(buffer);
+
+                // TODO: how to deal with be-encoding port?
                 buffer.extend_from_slice(&v4_addr.port().to_be_bytes());
-                buffer.extend_from_slice(v4_addr.ip().octets().as_slice());
+
+                v4_addr.ip().octets().encode(buffer);
             }
             Some(SocketAddr::V6(v6_addr)) => {
-                buffer.extend_from_slice(&(AF_INET6 as u16).to_le_bytes());
-                buffer.extend_from_slice(&v6_addr.port().to_le_bytes());
-                buffer.extend_from_slice(&v6_addr.flowinfo().to_le_bytes());
-                buffer.extend_from_slice(v6_addr.ip().octets().as_slice());
-                buffer.extend_from_slice(&v6_addr.scope_id().to_le_bytes());
+                (AF_INET6 as u16).encode(buffer);
+
+                // TODO: how to deal with be-encoding port?
+                buffer.extend_from_slice(&v6_addr.port().to_be_bytes());
+
+                v6_addr.flowinfo().encode(buffer);
+                v6_addr.ip().octets().encode(buffer);
+                v6_addr.scope_id().encode(buffer);
             }
             None => {}
         };

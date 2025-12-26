@@ -1,6 +1,14 @@
+use crate::EncodeExt;
+
 #[derive(Debug, Clone)]
 pub struct AuthSignature {
     pub sha256: [u8; 32],
+}
+
+impl EncodeExt for AuthSignature {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        self.sha256.encode(buffer);
+    }
 }
 
 impl AuthSignature {
@@ -16,9 +24,5 @@ impl AuthSignature {
         let sha256 = data.try_into().unwrap();
 
         Ok(Self { sha256 })
-    }
-
-    pub fn write_to(&self, buffer: &mut Vec<u8>) {
-        buffer.extend_from_slice(&self.sha256);
     }
 }
