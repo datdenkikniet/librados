@@ -7,9 +7,9 @@ mod entity_type;
 pub mod frame;
 pub mod messages;
 
-pub use ceph_features::CephFeatures;
+pub use ceph_features::CephFeatureSet;
 pub use connection::{Connection, Message};
-pub use encode::EncodeExt;
+pub use encode::Encode;
 pub use entity_address::{EntityAddress, EntityAddressType};
 pub use entity_name::EntityName;
 pub use entity_type::EntityType;

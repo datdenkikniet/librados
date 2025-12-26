@@ -1,9 +1,8 @@
-use crate::{CephFeatureSet, Encode, entity_address::EntityAddress};
+use crate::{CephFeatureSet, EntityAddress};
 
-#[derive(Clone, Debug)]
-pub struct ClientIdent {
+#[derive(Debug, Clone)]
+pub struct ServerIdent {
     pub addresses: Vec<EntityAddress>,
-    pub target: EntityAddress,
     pub gid: i64,
     pub global_seq: u64,
     pub supported_features: CephFeatureSet,
@@ -12,23 +11,8 @@ pub struct ClientIdent {
     pub cookie: u64,
 }
 
-impl Encode for ClientIdent {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        buffer.push(2u8); // Marker byte for the addrvec
-        self.addresses.encode(buffer);
-        self.target.encode(buffer);
-
-        self.gid.encode(buffer);
-        self.global_seq.encode(buffer);
-        self.supported_features.encode(buffer);
-        self.required_features.encode(buffer);
-        self.flags.encode(buffer);
-        self.cookie.encode(buffer);
-    }
-}
-
-impl ClientIdent {
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, String> {
+impl ServerIdent {
+    pub fn parse(data: &[u8]) -> Result<Self, String> {
         if data.len() < 5 {
             return Err(format!(
                 "Need at least 5 bytes for client ident, only got {}",
@@ -49,9 +33,6 @@ impl ClientIdent {
             left = &left[used..];
             addresses.push(address);
         }
-
-        let (used, target) = EntityAddress::parse(left)?;
-        left = &left[used..];
 
         if left.len() < 48 {
             return Err(format!(
@@ -79,7 +60,6 @@ impl ClientIdent {
 
         Ok(Self {
             addresses,
-            target,
             gid,
             global_seq,
             supported_features,

@@ -1,4 +1,4 @@
-pub trait EncodeExt {
+pub trait Encode {
     fn encode(&self, buffer: &mut Vec<u8>);
 }
 
@@ -7,31 +7,31 @@ fn encode_len(v: usize, buffer: &mut Vec<u8>) {
     len.encode(buffer);
 }
 
-impl<T> EncodeExt for &'_ T
+impl<T> Encode for &'_ T
 where
-    T: EncodeExt,
+    T: Encode,
 {
     fn encode(&self, buffer: &mut Vec<u8>) {
         (*self).encode(buffer);
     }
 }
 
-impl EncodeExt for [u8] {
+impl Encode for [u8] {
     fn encode(&self, buffer: &mut Vec<u8>) {
         encode_len(self.len(), buffer);
         buffer.extend_from_slice(self);
     }
 }
 
-impl<const N: usize> EncodeExt for [u8; N] {
+impl<const N: usize> Encode for [u8; N] {
     fn encode(&self, buffer: &mut Vec<u8>) {
         buffer.extend_from_slice(self.as_slice());
     }
 }
 
-impl<T> EncodeExt for [T]
+impl<T> Encode for [T]
 where
-    T: EncodeExt,
+    T: Encode,
 {
     fn encode(&self, buffer: &mut Vec<u8>) {
         encode_len(self.len(), buffer);
@@ -41,9 +41,9 @@ where
     }
 }
 
-impl<const N: usize, T> EncodeExt for [T; N]
+impl<const N: usize, T> Encode for [T; N]
 where
-    T: EncodeExt,
+    T: Encode,
 {
     fn encode(&self, buffer: &mut Vec<u8>) {
         for item in self.iter() {
@@ -55,7 +55,7 @@ where
 macro_rules! encode_int {
     ($($int:ty),*) => {
         $(
-            impl EncodeExt for $int {
+            impl Encode for $int {
                 fn encode(&self, buffer: &mut Vec<u8>) {
                     buffer.extend_from_slice(&self.to_le_bytes());
                 }

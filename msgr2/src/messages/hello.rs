@@ -1,4 +1,4 @@
-use crate::{EncodeExt, EntityType, entity_address::EntityAddress};
+use crate::{Encode, EntityType, entity_address::EntityAddress};
 
 #[derive(Debug, Clone)]
 pub struct Hello {
@@ -9,7 +9,7 @@ pub struct Hello {
     pub peer_address: EntityAddress,
 }
 
-impl EncodeExt for Hello {
+impl Encode for Hello {
     fn encode(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.entity_type.into());
         self.peer_address.encode(buffer);

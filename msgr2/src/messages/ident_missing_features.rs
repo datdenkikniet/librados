@@ -1,11 +1,11 @@
-use crate::{EncodeExt, messages::MsgrFeatures};
+use crate::{CephFeatureSet, Encode};
 
 #[derive(Debug, Clone)]
 pub struct IdentMissingFeatures {
-    pub features: MsgrFeatures,
+    pub features: CephFeatureSet,
 }
 
-impl EncodeExt for IdentMissingFeatures {
+impl Encode for IdentMissingFeatures {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.features.encode(buffer);
     }
@@ -17,7 +17,12 @@ impl IdentMissingFeatures {
             return None;
         }
 
-        let features = MsgrFeatures(u64::from_le_bytes(data.try_into().unwrap()));
+        let features = u64::from_le_bytes(data.try_into().unwrap());
+
+        let features = CephFeatureSet {
+            bits: features,
+            mask: features,
+        };
 
         Some(Self { features })
     }
