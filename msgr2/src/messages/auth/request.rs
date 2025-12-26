@@ -1,5 +1,5 @@
 use crate::{
-    EntityName,
+    EncodeExt, EntityName,
     messages::auth::{AuthMethod, ConMode},
 };
 
@@ -12,7 +12,7 @@ pub trait AuthRequestPayload: crate::sealed::Sealed {
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
     method: AuthMethod,
-    preferred_modes: Vec<ConMode>,
+    preferred_modes: Vec<u32>,
     auth_payload: Vec<u8>,
 }
 
@@ -21,24 +21,24 @@ impl AuthRequest {
     where
         T: AuthRequestPayload,
     {
+        let preferred_modes = preferred_modes
+            .into_iter()
+            .map(|v| u8::from(v) as u32)
+            .collect();
+
         Self {
             method: T::METHOD,
             preferred_modes,
             auth_payload: auth_method.payload(),
         }
     }
+}
 
-    pub fn write_to(&self, buffer: &mut Vec<u8>) {
-        buffer.extend_from_slice(&(u8::from(self.method) as u32).to_le_bytes());
-
-        buffer.extend_from_slice(&(self.preferred_modes.len() as u32).to_le_bytes());
-
-        for mode in &self.preferred_modes {
-            buffer.extend_from_slice(&(u8::from(*mode) as u32).to_le_bytes());
-        }
-
-        buffer.extend_from_slice(&(self.auth_payload.len() as u32).to_le_bytes());
-        buffer.extend_from_slice(&self.auth_payload);
+impl EncodeExt for AuthRequest {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        (u8::from(self.method) as u32).encode(buffer);
+        self.preferred_modes.encode(buffer);
+        self.auth_payload.encode(buffer);
     }
 }
 
@@ -56,8 +56,8 @@ impl AuthRequestPayload for AuthMethodNone {
         let mut buffer = Vec::with_capacity(9);
 
         buffer.push(1u8);
-        self.name.write_to(&mut buffer);
-        buffer.extend_from_slice(&self.global_id.to_le_bytes());
+        self.name.encode(&mut buffer);
+        self.global_id.encode(&mut buffer);
 
         buffer
     }

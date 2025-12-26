@@ -1,4 +1,4 @@
-use crate::{EntityType, entity_address::EntityAddress};
+use crate::{EncodeExt, EntityType, entity_address::EntityAddress};
 
 #[derive(Debug, Clone)]
 pub struct Hello {
@@ -9,12 +9,14 @@ pub struct Hello {
     pub peer_address: EntityAddress,
 }
 
-impl Hello {
-    pub(crate) fn write_to(&self, buffer: &mut Vec<u8>) {
+impl EncodeExt for Hello {
+    fn encode(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.entity_type.into());
-        self.peer_address.write(buffer);
+        self.peer_address.encode(buffer);
     }
+}
 
+impl Hello {
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let entity_type = EntityType::try_from(data[0])
             .map_err(|_| format!("Unknown entity type {}", data[0]))?;
@@ -54,7 +56,7 @@ fn round_trip() {
     };
 
     let mut hello_buffer = Vec::new();
-    hello.write_to(&mut hello_buffer);
+    hello.encode(&mut hello_buffer);
 
     println!("{:?}", hello_buffer);
 
