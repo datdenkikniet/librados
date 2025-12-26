@@ -1,10 +1,10 @@
 #[derive(Debug, Clone)]
-pub struct Epilogue {
+pub struct Epilogue<'a> {
     pub late_flags: u8,
-    pub crcs: [u32; 4],
+    pub crcs: &'a [u32],
 }
 
-impl Epilogue {
+impl<'a> Epilogue<'a> {
     pub const SERIALIZED_SIZE_V2_0: usize = 17;
 
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
@@ -17,19 +17,19 @@ impl Epilogue {
         Ok(1 + 4 * 4)
     }
 
-    pub fn parse(data: &[u8]) -> Result<Self, String> {
-        if data.len() != 17 {
+    pub fn parse(data: &[u8], crcs: &'a mut [u32]) -> Result<Self, String> {
+        let expected = 1 + (4 * crcs.len());
+        if data.len() != expected {
             return Err(format!(
-                "Expected 17 bytes of epilogue data, got {}",
+                "Expected {expected} bytes of epilogue data, got {}",
                 data.len()
             ));
         }
 
         let late_flags = data[0];
-        let mut crcs = [0u32; 4];
 
-        for (idx, chunk) in data[1..].chunks_exact(4).enumerate() {
-            let value = u32::from_le_bytes(chunk.try_into().unwrap());
+        for (idx, chunk) in data[1..].as_chunks().0.iter().enumerate() {
+            let value = u32::from_le_bytes(*chunk);
             crcs[idx] = value;
         }
 

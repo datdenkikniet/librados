@@ -57,6 +57,8 @@ fn main() {
     let mut banner_buffer = [0u8; Banner::SERIALIZED_SIZE];
     connection.banner().write(&mut banner_buffer);
 
+    println!("TX banner: {:?}", connection.banner());
+
     stream.write_all(&banner_buffer).unwrap();
     stream.read_exact(&mut banner_buffer).unwrap();
 

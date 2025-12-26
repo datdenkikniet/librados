@@ -24,6 +24,7 @@ impl State {
 }
 
 pub struct Connection {
+    support_rev21: bool,
     state: State,
     revision: Msgr2Revision,
     buffer: Vec<u8>,
@@ -32,18 +33,26 @@ pub struct Connection {
 impl Connection {
     pub fn new() -> Self {
         Self {
+            support_rev21: true,
             state: State::Inactive,
             revision: Msgr2Revision::V2_0,
             buffer: Vec::new(),
         }
     }
 
-    pub fn banner(&self) -> Banner {
-        Banner::new(MsgrFeatures::empty(), MsgrFeatures::empty())
+    pub fn support_rev21(&mut self, support_rev21: bool) {
+        assert!(self.state.is_inactive());
+        self.support_rev21 = support_rev21;
     }
 
-    pub fn msgr2_revision(&self) -> Msgr2Revision {
-        self.revision
+    pub fn banner(&self) -> Banner {
+        let mut features = MsgrFeatures::empty();
+
+        if self.support_rev21 {
+            features.set_revision_21(true);
+        }
+
+        Banner::new(features, MsgrFeatures::empty())
     }
 
     pub fn preamble_len(&self) -> usize {
@@ -58,8 +67,8 @@ impl Connection {
             return Err("Peer requires compression, which we do not support.".into());
         }
 
-        if banner.required().revision_21() {
-            return Err("Peer requires msgr revision 2.1, which we do not support".into());
+        if self.support_rev21 && banner.supported().revision_21() {
+            self.revision = Msgr2Revision::V2_1;
         }
 
         self.state = State::Active;

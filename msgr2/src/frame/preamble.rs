@@ -100,7 +100,7 @@ impl Preamble {
         let epilogue_len = match self.revision {
             Msgr2Revision::V2_0 => Epilogue::SERIALIZED_SIZE_V2_0,
             Msgr2Revision::V2_1 => {
-                let first_segment_crc = if self.segments()[0].len() == 0 { 4 } else { 0 };
+                let first_segment_crc = if self.segments()[0].len() > 0 { 4 } else { 0 };
                 let epilogue = if self.segments().len() > 1 { 13 } else { 0 };
 
                 first_segment_crc + epilogue
