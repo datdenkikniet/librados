@@ -157,11 +157,11 @@ impl Message {
     pub fn write_to(&self, buffer: &mut Vec<u8>) {
         match self {
             Message::Hello(hello) => hello.encode(buffer),
-            Message::ClientIdent(client_ident) => client_ident.write_to(buffer),
+            Message::ClientIdent(client_ident) => client_ident.encode(buffer),
             Message::AuthRequest(auth_request) => auth_request.encode(buffer),
-            Message::Keepalive(keepalive) => keepalive.write_to(buffer),
+            Message::Keepalive(keepalive) => keepalive.encode(buffer),
             Message::AuthDone(_) => todo!(),
-            Message::AuthSignature(signature) => signature.write_to(buffer),
+            Message::AuthSignature(signature) => signature.encode(buffer),
         }
     }
 

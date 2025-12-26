@@ -12,27 +12,22 @@ pub struct ClientIdent {
     pub cookie: u64,
 }
 
-impl ClientIdent {
-    pub(crate) fn write_to(&self, buffer: &mut Vec<u8>) {
-        let addresses = self.addresses.len() as u32;
-
-        buffer.extend_from_slice(&[2u8]); // Marker byte for the addrvec
-        buffer.extend_from_slice(&addresses.to_le_bytes());
-
-        for address in &self.addresses {
-            address.encode(buffer);
-        }
-
+impl EncodeExt for ClientIdent {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        buffer.push(2u8); // Marker byte for the addrvec
+        self.addresses.encode(buffer);
         self.target.encode(buffer);
 
-        buffer.extend_from_slice(&self.gid.to_le_bytes());
-        buffer.extend_from_slice(&self.global_seq.to_le_bytes());
-        buffer.extend_from_slice(&self.supported_features.get().to_le_bytes());
-        buffer.extend_from_slice(&self.required_features.get().to_le_bytes());
-        buffer.extend_from_slice(&self.flags.to_le_bytes());
-        buffer.extend_from_slice(&self.cookie.to_le_bytes());
+        self.gid.encode(buffer);
+        self.global_seq.encode(buffer);
+        self.supported_features.encode(buffer);
+        self.required_features.encode(buffer);
+        self.flags.encode(buffer);
+        self.cookie.encode(buffer);
     }
+}
 
+impl ClientIdent {
     pub(crate) fn parse(data: &[u8]) -> Result<Self, String> {
         if data.len() < 5 {
             return Err(format!(

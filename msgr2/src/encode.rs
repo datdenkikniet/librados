@@ -7,18 +7,6 @@ fn encode_len(v: usize, buffer: &mut Vec<u8>) {
     len.encode(buffer);
 }
 
-pub fn encode_iter<I, T>(iterator: I, buffer: &mut Vec<u8>)
-where
-    I: ExactSizeIterator<Item = T>,
-    T: EncodeExt,
-{
-    encode_len(iterator.len(), buffer);
-
-    for item in iterator {
-        item.encode(buffer);
-    }
-}
-
 impl<T> EncodeExt for &'_ T
 where
     T: EncodeExt,
