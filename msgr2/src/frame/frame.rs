@@ -1,6 +1,7 @@
 use std::num::NonZeroU8;
 
 use crate::frame::{
+    Msgr2Revision,
     epilogue::Epilogue,
     preamble::{Preamble, SegmentDetail, Tag},
 };
@@ -22,13 +23,14 @@ const EMPTY: &'static [u8] = &[];
 
 #[derive(Debug, Clone)]
 pub struct Frame<'a> {
+    revision: Msgr2Revision,
     tag: Tag,
     valid_segments: NonZeroU8,
     segments: [&'a [u8]; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(tag: Tag, segments: &[&'a [u8]]) -> Option<Self> {
+    pub fn new(tag: Tag, segments: &[&'a [u8]], revision: Msgr2Revision) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
         }
@@ -39,6 +41,7 @@ impl<'a> Frame<'a> {
         segments_out[..segments.len()].copy_from_slice(segments);
 
         Some(Self {
+            revision,
             tag,
             valid_segments,
             segments: segments_out,
@@ -63,6 +66,7 @@ impl<'a> Frame<'a> {
         }
 
         let preamble = Preamble {
+            revision: self.revision,
             flags: 0,
             tag: self.tag,
             segment_count: self.valid_segments,
@@ -134,6 +138,7 @@ impl<'a> Frame<'a> {
         }
 
         Ok(Self {
+            revision: preamble.revision,
             tag: preamble.tag,
             valid_segments: preamble.segment_count,
             segments,

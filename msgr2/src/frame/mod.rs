@@ -5,6 +5,12 @@ mod preamble;
 pub use frame::Frame;
 pub use preamble::{Preamble, Tag};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Msgr2Revision {
+    V2_0,
+    V2_1,
+}
+
 #[test]
 fn valid_frame() {
     let frame_data = &[
@@ -14,8 +20,9 @@ fn valid_frame() {
         00, 00, 105, 92, 102, 236, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
     ];
 
+    let rev = Msgr2Revision::V2_0;
     let (preamble, frame_data) = frame_data.split_at(Preamble::SERIALIZED_SIZE);
-    let preamble = Preamble::parse(preamble).unwrap();
+    let preamble = Preamble::parse(preamble, rev).unwrap();
 
     Frame::parse(&preamble, frame_data).expect("Valid frame should be parseable");
 }
