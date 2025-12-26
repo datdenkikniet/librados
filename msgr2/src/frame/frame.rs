@@ -55,7 +55,7 @@ impl<'a> Frame<'a> {
     }
 
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        let segments = &self.segments[..self.valid_segments.get() as usize];
+        let segments = self.segments();
 
         let mut segment_details = [SegmentDetail::default(); 4];
         for (idx, segment) in segments.iter().enumerate() {
@@ -78,17 +78,41 @@ impl<'a> Frame<'a> {
         let mut crcs = [0u32; 4];
 
         for (idx, segment) in segments.iter().enumerate() {
-            crcs[idx] = CRC.checksum(segment);
+            let crc = CRC.checksum(segment);
+            crcs[idx] = crc;
             output.write_all(segment)?;
             used += segment.len();
+
+            if self.revision == Msgr2Revision::V2_1 && idx == 0 && segment.len() > 0 {
+                output.write_all(&crc.to_le_bytes())?;
+                used += 4;
+            }
         }
 
-        let epilogue = Epilogue {
-            late_flags: 0,
-            crcs,
-        };
+        used += match self.revision {
+            Msgr2Revision::V2_0 => {
+                let epilogue = Epilogue {
+                    late_flags: 0,
+                    crcs: &crcs,
+                };
 
-        used += epilogue.write(&mut output)?;
+                epilogue.write(&mut output)?
+            }
+            Msgr2Revision::V2_1 => {
+                let need_epilogue = segments.iter().skip(1).any(|v| v.len() > 0);
+
+                if need_epilogue {
+                    let epilogue = Epilogue {
+                        late_flags: 0,
+                        crcs: &crcs[1..],
+                    };
+
+                    epilogue.write(&mut output)?
+                } else {
+                    0
+                }
+            }
+        };
 
         Ok(used)
     }
@@ -97,6 +121,7 @@ impl<'a> Frame<'a> {
         let mut trailer = data;
 
         let mut segments = [EMPTY; 4];
+        let mut crc_segment1 = 0xFFFF_FFFF;
 
         for (idx, segment) in preamble.segments().iter().enumerate() {
             let len = segment.len();
@@ -110,11 +135,36 @@ impl<'a> Frame<'a> {
             })?;
             trailer = left;
             segments[idx] = segment;
+
+            if idx == 0 && preamble.revision == Msgr2Revision::V2_1 {
+                let (crc, left) = trailer.split_first_chunk::<4>().ok_or_else(|| {
+                    format!(
+                        "Expected 4 bytes of CRC data, but only had {} left",
+                        trailer.len()
+                    )
+                })?;
+
+                crc_segment1 = u32::from_le_bytes(*crc);
+                trailer = left;
+            }
         }
 
-        let epilogue = Epilogue::parse(trailer)?;
+        let mut crcs = [0; 4];
 
-        for (idx, crc) in epilogue.crcs.iter().copied().enumerate() {
+        match preamble.revision {
+            Msgr2Revision::V2_0 => {
+                Epilogue::parse(trailer, &mut crcs)?;
+            }
+            Msgr2Revision::V2_1 => {
+                crcs[0] = crc_segment1;
+
+                if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
+                    Epilogue::parse(trailer, &mut crcs[1..])?;
+                }
+            }
+        };
+
+        for (idx, crc) in crcs.iter().copied().enumerate() {
             if idx < preamble.segment_count.get() as usize {
                 let segment = segments[idx];
                 let calculated_crc = CRC.checksum(segment);
@@ -126,14 +176,12 @@ impl<'a> Frame<'a> {
                         idx + 1
                     ));
                 }
-            } else {
-                if crc != 0 {
-                    return Err(format!(
-                        "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
-                        crc,
-                        idx + 1
-                    ));
-                }
+            } else if crc != 0 {
+                return Err(format!(
+                    "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
+                    crc,
+                    idx + 1
+                ));
             }
         }
 
