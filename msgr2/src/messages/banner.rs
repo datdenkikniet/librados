@@ -60,11 +60,13 @@ impl Banner {
         })
     }
 
-    pub fn write<'a>(&self, output: &'a mut [u8; Self::SERIALIZED_SIZE]) {
+    pub fn to_bytes(&self) -> [u8; Self::SERIALIZED_SIZE] {
+        let mut output = [0u8; Self::SERIALIZED_SIZE];
         output[..8].copy_from_slice(HEADER);
         output[8..10].copy_from_slice(&16u16.to_le_bytes());
         output[10..18].copy_from_slice(&self.supported_features.0.to_le_bytes());
         output[18..26].copy_from_slice(&self.required_features.0.to_le_bytes());
+        output
     }
 
     pub fn supported(&self) -> &MsgrFeatures {

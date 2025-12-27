@@ -1,5 +1,5 @@
 mod ceph_features;
-mod connection;
+pub mod connection;
 mod encode;
 mod entity_address;
 mod entity_name;
@@ -8,7 +8,6 @@ pub mod frame;
 pub mod messages;
 
 pub use ceph_features::CephFeatureSet;
-pub use connection::{Active, Config, Connection, Inactive, Message};
 pub use encode::Encode;
 pub use entity_address::{EntityAddress, EntityAddressType};
 pub use entity_name::EntityName;
