@@ -4,13 +4,16 @@ use std::{
 };
 
 use ceph_protocol::{
-    CephFeatureSet, Connection, EntityAddress, EntityAddressType, EntityName, EntityType, Message,
+    Active, CephFeatureSet, Config, EntityAddress, EntityAddressType, EntityName, EntityType,
+    Message,
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive, Timestamp,
         auth::{AuthMethodNone, AuthRequest, AuthSignature, ConMode},
     },
 };
+
+type Connection = ceph_protocol::Connection<Active>;
 
 fn send<T>(connection: &mut Connection, w: &mut impl std::io::Write, msg: T)
 where
@@ -52,7 +55,8 @@ fn recv(connection: &mut Connection, r: &mut impl std::io::Read) -> Message {
 fn main() {
     let mut stream = TcpStream::connect("10.0.1.227:3300").unwrap();
 
-    let mut connection = Connection::new();
+    let config = Config::new(true);
+    let connection = ceph_protocol::Connection::new(config);
 
     let mut banner_buffer = [0u8; Banner::SERIALIZED_SIZE];
     connection.banner().write(&mut banner_buffer);
@@ -63,7 +67,7 @@ fn main() {
     stream.read_exact(&mut banner_buffer).unwrap();
 
     let rx_banner = Banner::parse(&banner_buffer).unwrap();
-    connection.recv_banner(&rx_banner).unwrap();
+    let mut connection = connection.recv_banner(&rx_banner).unwrap();
 
     println!("RX banner: {rx_banner:?}");
 
