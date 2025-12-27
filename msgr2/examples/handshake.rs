@@ -4,22 +4,16 @@ use std::{
 };
 
 use ceph_protocol::{
-    Active, CephFeatureSet, Config, EntityAddress, EntityAddressType, EntityName, EntityType,
-    Message,
+    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType,
+    connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive, Timestamp,
-        auth::{AuthMethodNone, AuthRequest, AuthSignature, ConMode},
+        auth::{AuthMethodNone, AuthRequest, ConMode},
     },
 };
 
-type Connection = ceph_protocol::Connection<Active>;
-
-fn send<T>(connection: &mut Connection, w: &mut impl std::io::Write, msg: T)
-where
-    T: Into<Message>,
-{
-    let frame = connection.send(msg);
+fn send(frame: Frame<'_>, w: &mut impl std::io::Write) {
     let to_send = frame.to_vec();
 
     println!(
@@ -33,7 +27,10 @@ where
     w.flush().unwrap();
 }
 
-fn recv(connection: &mut Connection, r: &mut impl std::io::Read) -> Message {
+fn recv<S>(connection: &mut Connection<S>, r: &mut impl std::io::Read) -> Message
+where
+    S: Established,
+{
     let mut buffer = Vec::new();
     buffer.resize(connection.preamble_len(), 0);
     let len = r.read(&mut buffer).unwrap();
@@ -56,20 +53,31 @@ fn main() {
     let mut stream = TcpStream::connect("10.0.1.227:3300").unwrap();
 
     let config = Config::new(true);
-    let connection = ceph_protocol::Connection::new(config);
+    let connection = ceph_protocol::connection::Connection::new(config);
 
-    let mut banner_buffer = [0u8; Banner::SERIALIZED_SIZE];
-    connection.banner().write(&mut banner_buffer);
+    let mut banner = connection.banner().to_bytes();
 
     println!("TX banner: {:?}", connection.banner());
 
-    stream.write_all(&banner_buffer).unwrap();
-    stream.read_exact(&mut banner_buffer).unwrap();
+    stream.write_all(&banner).unwrap();
+    stream.read_exact(&mut banner).unwrap();
 
-    let rx_banner = Banner::parse(&banner_buffer).unwrap();
+    let rx_banner = Banner::parse(&banner).unwrap();
     let mut connection = connection.recv_banner(&rx_banner).unwrap();
 
     println!("RX banner: {rx_banner:?}");
+
+    let hello = Hello {
+        entity_type: EntityType::Client,
+        peer_address: EntityAddress {
+            ty: EntityAddressType::Msgr2,
+            nonce: 118844,
+            address: stream.peer_addr().ok(),
+        },
+    };
+
+    let hello_frame = connection.send_hello(&hello);
+    send(hello_frame, &mut stream);
 
     let Message::Hello(rx_hello) = recv(&mut connection, &mut stream) else {
         panic!("Expected Hello, got something else");
@@ -77,16 +85,7 @@ fn main() {
 
     println!("RX hello: {rx_hello:?}");
 
-    let hello = Hello {
-        entity_type: EntityType::Client,
-        peer_address: EntityAddress {
-            ty: EntityAddressType::Msgr2,
-            nonce: rx_hello.peer_address.nonce,
-            address: stream.peer_addr().ok(),
-        },
-    };
-
-    send(&mut connection, &mut stream, hello.clone());
+    let mut connection = connection.recv_hello(&rx_hello);
 
     let method = AuthMethodNone {
         name: EntityName {
@@ -95,21 +94,25 @@ fn main() {
         },
         global_id: 1332,
     };
-    let auth_req = AuthRequest::new(method, vec![ConMode::Crc]);
 
-    send(&mut connection, &mut stream, auth_req);
-    let rx_auth = recv(&mut connection, &mut stream);
+    let auth_req = AuthRequest::new(method, vec![ConMode::Crc]);
+    let auth_req = connection.send_req(&auth_req);
+    send(auth_req, &mut stream);
+
+    let Message::AuthDone(rx_auth) = recv(&mut connection, &mut stream) else {
+        panic!("Expected AuthDone, got something else");
+    };
 
     println!("Auth rx: {rx_auth:?}");
+    let signature = connection.recv_done(&rx_auth);
+    send(signature, &mut stream);
 
-    let rx_sig = recv(&mut connection, &mut stream);
+    let Message::AuthSignature(rx_sig) = recv(&mut connection, &mut stream) else {
+        panic!("Expected AuthSignature, got something else");
+    };
+
     println!("Signature rx: {rx_sig:?}");
-
-    send(
-        &mut connection,
-        &mut stream,
-        AuthSignature { sha256: [0u8; _] },
-    );
+    let mut connection = connection.recv_signature(&rx_sig).unwrap();
 
     let target = EntityAddress {
         ty: EntityAddressType::Msgr2,
@@ -128,7 +131,9 @@ fn main() {
         cookie: 1337,
     };
 
-    send(&mut connection, &mut stream, ident);
+    let ident = connection.send_client_ident(&ident);
+    send(ident, &mut stream);
+
     let ident_rx = match recv(&mut connection, &mut stream) {
         Message::ServerIdent(id) => id,
         Message::IdentMissingFeatures(i) => {
@@ -141,6 +146,8 @@ fn main() {
 
     println!("Ident RX: {:08X?}", ident_rx);
 
+    let mut connection = connection.recv_server_ident(&ident_rx).unwrap();
+
     let keepalive = Keepalive {
         timestamp: Timestamp {
             tv_sec: 123,
@@ -148,7 +155,8 @@ fn main() {
         },
     };
 
-    send(&mut connection, &mut stream, keepalive);
+    let keepalive = connection.send(keepalive);
+    send(keepalive, &mut stream);
     let rx_keepalive = recv(&mut connection, &mut stream);
 
     println!("Keepalive RX: {rx_keepalive:?}");

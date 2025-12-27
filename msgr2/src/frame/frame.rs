@@ -30,7 +30,7 @@ pub struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(tag: Tag, segments: &[&'a [u8]], revision: Msgr2Revision) -> Option<Self> {
+    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], revision: Msgr2Revision) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
         }
