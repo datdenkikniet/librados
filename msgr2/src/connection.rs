@@ -9,7 +9,7 @@ use crate::{
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
-        auth::{AuthDone, AuthRequest, AuthSignature},
+        auth::{AuthBadMethod, AuthDone, AuthRequest, AuthSignature},
     },
 };
 
@@ -229,6 +229,7 @@ message! {
     ClientIdent,
     ServerIdent,
     AuthRequest,
+    AuthBadMethod,
     AuthDone,
     AuthSignature,
     Keepalive,
@@ -248,6 +249,7 @@ impl Message {
             Message::IdentMissingFeatures(_) => Tag::IdentMissingFeatures,
             Message::ServerIdent(_) => Tag::ServerIdent,
             Message::KeepaliveAck(_) => Tag::Keepalive2Ack,
+            Message::AuthBadMethod(_) => Tag::AuthBadMethod,
         }
     }
 
@@ -264,6 +266,7 @@ impl Message {
             }
             Message::ServerIdent(_) => todo!(),
             Message::KeepaliveAck(_) => todo!(),
+            Message::AuthBadMethod(_) => todo!(),
         }
     }
 
@@ -281,6 +284,7 @@ impl Message {
             Tag::Keepalive2Ack => Ok(Self::KeepaliveAck(
                 KeepaliveAck::parse(data).ok_or("Incorrect amount of data for keep alive ack")?,
             )),
+            Tag::AuthBadMethod => Ok(Self::AuthBadMethod(AuthBadMethod::parse(data)?)),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }

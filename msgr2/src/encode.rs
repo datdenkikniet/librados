@@ -1,5 +1,11 @@
 pub trait Encode {
     fn encode(&self, buffer: &mut Vec<u8>);
+
+    fn to_vec(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        self.encode(&mut vec);
+        vec
+    }
 }
 
 fn encode_len(v: usize, buffer: &mut Vec<u8>) {

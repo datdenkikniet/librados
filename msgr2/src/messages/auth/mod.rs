@@ -1,9 +1,11 @@
+mod bad_method;
 mod done;
 mod request;
 mod signature;
 
+pub use bad_method::AuthBadMethod;
 pub use done::AuthDone;
-pub use request::{AuthMethodNone, AuthRequest, AuthRequestPayload};
+pub use request::{AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestPayload, CephXTicket};
 pub use signature::AuthSignature;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +19,15 @@ pub enum AuthMethod {
 impl From<AuthMethod> for u8 {
     fn from(value: AuthMethod) -> Self {
         value as _
+    }
+}
+
+impl TryFrom<u32> for AuthMethod {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        let value = u8::try_from(value).map_err(|_| ())?;
+        Self::try_from(value)
     }
 }
 
@@ -46,6 +57,15 @@ pub enum ConMode {
 impl From<ConMode> for u8 {
     fn from(value: ConMode) -> Self {
         value as _
+    }
+}
+
+impl TryFrom<u32> for ConMode {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        let value = u8::try_from(value).map_err(|_| ())?;
+        Self::try_from(value)
     }
 }
 
