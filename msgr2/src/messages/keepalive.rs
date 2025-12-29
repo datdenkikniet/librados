@@ -1,4 +1,4 @@
-use crate::{Encode, messages::Timestamp};
+use crate::{Encode, Timestamp};
 
 #[derive(Debug, Clone)]
 pub struct Keepalive {

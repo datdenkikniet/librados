@@ -4,12 +4,12 @@ use std::{
 };
 
 use ceph_protocol::{
-    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType,
+    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType, Timestamp,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
-        Banner, ClientIdent, Hello, Keepalive, Timestamp,
-        auth::{AuthMethodNone, AuthRequest, ConMode},
+        Banner, ClientIdent, Hello, Keepalive,
+        auth::{AuthMethodCephX, AuthMethodNone, AuthRequest, CephXTicket, ConMode},
     },
 };
 
@@ -87,20 +87,30 @@ fn main() {
 
     let mut connection = connection.recv_hello(&rx_hello);
 
-    let method = AuthMethodNone {
-        name: EntityName {
-            ty: EntityType::Client,
-            name: "client.1332".into(),
+    // let method = AuthMethodNone {
+    //     name: EntityName {
+    //         ty: EntityType::Client,
+    //         name: "client.1332".into(),
+    //     },
+    //     global_id: 1332,
+    // };
+
+    let method = AuthMethodCephX {
+        service_id: EntityType::Mon,
+        global_id: 1001,
+        ticket: CephXTicket {
+            secret_id: 0,
+            blob: Vec::new(),
         },
-        global_id: 1332,
     };
 
-    let auth_req = AuthRequest::new(method, vec![ConMode::Crc]);
+    let auth_req = AuthRequest::new(method, vec![ConMode::Secure, ConMode::Crc]);
     let auth_req = connection.send_req(&auth_req);
     send(auth_req, &mut stream);
 
-    let Message::AuthDone(rx_auth) = recv(&mut connection, &mut stream) else {
-        panic!("Expected AuthDone, got something else");
+    let rx_auth = match recv(&mut connection, &mut stream) {
+        Message::AuthDone(m) => m,
+        o => panic!("Expected AuthDone, got {o:?}"),
     };
 
     println!("Auth rx: {rx_auth:?}");

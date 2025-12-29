@@ -19,7 +19,7 @@ impl AuthDone {
         let global_id = u64::from_le_bytes(data[0..8].try_into().unwrap());
         let connection_mode = u32::from_le_bytes(data[8..12].try_into().unwrap());
 
-        let Ok(Ok(connection_mode)) = u8::try_from(connection_mode).map(ConMode::try_from) else {
+        let Ok(connection_mode) = ConMode::try_from(connection_mode) else {
             return Err(format!("Unknown connection mode {}", connection_mode));
         };
 

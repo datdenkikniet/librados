@@ -1,3 +1,5 @@
+use crate::Encode;
+
 /// The type of entity we are talking to (MON, MDS, OSD, CLIENT or MGR).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityType {
@@ -40,5 +42,11 @@ impl TryFrom<u8> for EntityType {
         };
 
         Ok(res)
+    }
+}
+
+impl Encode for EntityType {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        buffer.push(u8::from(*self))
     }
 }
