@@ -1,4 +1,4 @@
-use crate::Timestamp;
+use crate::{Encode, Timestamp};
 
 pub struct CryptoKey {
     ty: u16,
@@ -17,6 +17,15 @@ impl core::fmt::Debug for CryptoKey {
 }
 
 impl CryptoKey {
+    pub fn encode_hazmat(&self, buffer: &mut Vec<u8>) {
+        self.ty.encode(buffer);
+        self.created.encode(buffer);
+
+        let len = u16::try_from(self.secret.len()).unwrap();
+        len.encode(buffer);
+        buffer.extend_from_slice(&self.secret);
+    }
+
     pub fn decode(data: &[u8]) -> Self {
         let ty = u16::from_le_bytes(data[..2].try_into().unwrap());
         let (created, used) = Timestamp::parse(&data[2..]).unwrap();
