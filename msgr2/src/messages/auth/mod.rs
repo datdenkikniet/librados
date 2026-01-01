@@ -7,7 +7,10 @@ mod signature;
 pub use bad_method::AuthBadMethod;
 pub use done::AuthDone;
 pub use reply_more::{AuthReplyMore, CephXServerChallenge};
-pub use request::{AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestPayload, CephXTicket};
+pub use request::{
+    AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, AuthRequestPayload,
+    CephXAuthenticate, CephXAuthenticateKey, CephXMessage, CephXMessageType, CephXTicket,
+};
 pub use signature::AuthSignature;
 
 use crate::Encode;
