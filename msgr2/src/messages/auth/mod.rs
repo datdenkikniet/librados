@@ -1,10 +1,12 @@
 mod bad_method;
 mod done;
+mod reply_more;
 mod request;
 mod signature;
 
 pub use bad_method::AuthBadMethod;
 pub use done::AuthDone;
+pub use reply_more::{AuthReplyMore, CephXServerChallenge};
 pub use request::{AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestPayload, CephXTicket};
 pub use signature::AuthSignature;
 

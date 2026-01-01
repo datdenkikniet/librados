@@ -10,7 +10,10 @@ use ceph_protocol::{
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
-        auth::{AuthMethodCephX, AuthMethodNone, AuthRequest, CephXTicket, ConMode},
+        auth::{
+            AuthMethodCephX, AuthMethodNone, AuthRequest, CephXServerChallenge, CephXTicket,
+            ConMode,
+        },
     },
 };
 
@@ -109,6 +112,15 @@ fn main() {
     let auth_req = AuthRequest::new(method, vec![ConMode::Secure, ConMode::Crc]);
     let auth_req = connection.send_req(&auth_req);
     send(auth_req, &mut stream);
+
+    let more = match recv(&mut connection, &mut stream) {
+        Message::AuthReplyMore(m) => m,
+        o => panic!("Expected AuthReplyMore, got {o:?}"),
+    };
+
+    let challenge = CephXServerChallenge::parse(&more.payload).unwrap();
+
+    println!("Server challenge: {challenge:?}");
 
     let rx_auth = match recv(&mut connection, &mut stream) {
         Message::AuthDone(m) => m,
