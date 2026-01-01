@@ -1,6 +1,7 @@
 use crate::{
-    Encode, EntityName, EntityType,
-    messages::auth::{AuthMethod, ConMode},
+    Encode, EntityName, Timestamp,
+    cephx::CryptoKey,
+    messages::auth::{AuthMethod, ConMode, ConModeU32},
 };
 
 pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {
@@ -10,7 +11,7 @@ pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
     method: AuthMethod,
-    preferred_modes: Vec<u32>,
+    preferred_modes: Vec<ConModeU32>,
     auth_payload: Vec<u8>,
 }
 
@@ -19,16 +20,64 @@ impl AuthRequest {
     where
         T: AuthRequestPayload,
     {
-        let preferred_modes = preferred_modes
-            .into_iter()
-            .map(|v| u8::from(v) as u32)
-            .collect();
+        let preferred_modes = preferred_modes.into_iter().map(ConModeU32).collect();
 
         Self {
             method: T::METHOD,
             preferred_modes,
             auth_payload: auth_method.to_vec(),
         }
+    }
+
+    pub fn parse(data: &[u8]) -> Result<Self, String> {
+        if data.len() < 12 {
+            return Err(format!("Expected at least 12 bytes of auth request data"));
+        }
+
+        let method = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let Ok(method) = AuthMethod::try_from(method) else {
+            return Err(format!("Unknown auth method {method}"));
+        };
+
+        let len = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let mut preferred_modes = Vec::with_capacity(len as usize);
+        let mut left = &data[8..];
+
+        for _ in 0..len {
+            let (val, new_left) = left
+                .split_first_chunk::<4>()
+                .ok_or("Ran out of data to construct preferred modes")?;
+
+            let mode = u32::from_le_bytes(*val);
+            let Ok(mode) = ConMode::try_from(mode) else {
+                return Err(format!("Unknown connection mode {mode}"));
+            };
+
+            preferred_modes.push(ConModeU32(mode));
+            left = new_left;
+        }
+
+        let (len, left) = left
+            .split_first_chunk::<4>()
+            .ok_or("Not enough data to construct auth payload")?;
+
+        let len = u32::from_le_bytes(*len);
+
+        if left.len() != len as usize {
+            return Err(format!(
+                "Expected {} bytes of auth payload, got {}",
+                len,
+                data.len()
+            ));
+        }
+
+        let auth_payload = left.to_vec();
+
+        Ok(Self {
+            method,
+            preferred_modes,
+            auth_payload,
+        })
     }
 }
 
@@ -60,25 +109,23 @@ impl AuthRequestPayload for AuthMethodNone {
     const METHOD: AuthMethod = AuthMethod::None;
 }
 
-// This data is what's decoded by `cephx_verify_authorizer`
+/// As encoded in `MonClient.cc` -> `Connection::get_auth_request`.
+///
+/// See: `Monitor::handle_auth_request`
 #[derive(Debug)]
 pub struct AuthMethodCephX {
-    // TODO: this can be multiple?
-    pub service_id: EntityType,
+    pub name: EntityName,
     pub global_id: u64,
-    pub ticket: CephXTicket,
 }
 
 impl crate::sealed::Sealed for AuthMethodCephX {}
 
 impl Encode for AuthMethodCephX {
     fn encode(&self, buffer: &mut Vec<u8>) {
-        // Authorizer version
-        buffer.push(1);
-
+        // Auth mode
+        buffer.push(10);
+        self.name.encode(buffer);
         self.global_id.encode(buffer);
-        (u8::from(self.service_id) as u32).encode(buffer);
-        self.ticket.encode(buffer);
     }
 }
 
@@ -97,5 +144,65 @@ impl Encode for CephXTicket {
         buffer.push(1u8);
         self.secret_id.encode(buffer);
         self.blob.encode(buffer);
+    }
+}
+
+#[derive(Debug)]
+pub struct AuthCapsInfo {
+    pub allow_all: bool,
+    pub caps: Vec<u8>,
+}
+
+impl Encode for AuthCapsInfo {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        // Struct version
+        buffer.push(1u8);
+        buffer.push(self.allow_all as u8);
+        self.caps.encode(buffer);
+    }
+}
+
+#[derive(Debug)]
+pub struct AuthTicket {
+    pub name: EntityName,
+    pub global_id: u64,
+    pub created: Timestamp,
+    pub expires: Timestamp,
+    pub caps: AuthCapsInfo,
+    // TODO: proper flags type.
+    pub flags: u32,
+}
+
+impl Encode for AuthTicket {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        // Struct version
+        buffer.push(2u8);
+
+        self.name.encode(buffer);
+        self.global_id.encode(buffer);
+
+        // CEPH_AUTH_UID_DEFAULT
+        u64::MAX.encode(buffer);
+
+        self.created.encode(buffer);
+        self.expires.encode(buffer);
+        self.caps.encode(buffer);
+        self.flags.encode(buffer);
+    }
+}
+
+#[derive(Debug)]
+pub struct CephXServiceTicketInfo {
+    pub auth_ticket: AuthTicket,
+    pub session_key: CryptoKey,
+}
+
+impl CephXServiceTicketInfo {
+    pub fn encode_hazmat(&self, buffer: &mut Vec<u8>) {
+        // Struct version
+        buffer.push(1u8);
+
+        self.auth_ticket.encode(buffer);
+        self.session_key.encode_hazmat(buffer);
     }
 }

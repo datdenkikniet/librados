@@ -8,6 +8,8 @@ pub use done::AuthDone;
 pub use request::{AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestPayload, CephXTicket};
 pub use signature::AuthSignature;
 
+use crate::Encode;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMethod {
     Unknown = 0,
@@ -81,5 +83,14 @@ impl TryFrom<u8> for ConMode {
         };
 
         Ok(res)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ConModeU32(pub ConMode);
+
+impl Encode for ConModeU32 {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        u32::from(self.0 as u8).encode(buffer);
     }
 }

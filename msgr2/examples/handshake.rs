@@ -1,6 +1,7 @@
 use std::{
     io::{Read, Write},
     net::TcpStream,
+    u64,
 };
 
 use ceph_protocol::{
@@ -50,7 +51,7 @@ where
 }
 
 fn main() {
-    let mut stream = TcpStream::connect("10.0.1.227:3300").unwrap();
+    let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
     let config = Config::new(true);
     let connection = ceph_protocol::connection::Connection::new(config);
@@ -87,21 +88,22 @@ fn main() {
 
     let mut connection = connection.recv_hello(&rx_hello);
 
+    let name = EntityName {
+        ty: EntityType::Client,
+        name: "admin".into(),
+    };
+
     // let method = AuthMethodNone {
     //     name: EntityName {
     //         ty: EntityType::Client,
-    //         name: "client.1332".into(),
+    //         name,
     //     },
     //     global_id: 1332,
     // };
 
     let method = AuthMethodCephX {
-        service_id: EntityType::Mon,
         global_id: 1001,
-        ticket: CephXTicket {
-            secret_id: 0,
-            blob: Vec::new(),
-        },
+        name,
     };
 
     let auth_req = AuthRequest::new(method, vec![ConMode::Secure, ConMode::Crc]);

@@ -285,6 +285,7 @@ impl Message {
                 KeepaliveAck::parse(data).ok_or("Incorrect amount of data for keep alive ack")?,
             )),
             Tag::AuthBadMethod => Ok(Self::AuthBadMethod(AuthBadMethod::parse(data)?)),
+            Tag::AuthRequest => Ok(Self::AuthRequest(AuthRequest::parse(data)?)),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }
