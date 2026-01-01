@@ -109,7 +109,7 @@ impl AuthRequestPayload for AuthMethodNone {
     const METHOD: AuthMethod = AuthMethod::None;
 }
 
-/// As encoded in `MonClient.cc` -> `Connection::get_auth_request`.
+/// As encoded in `MonClient.cc` -> `MonConnection::get_auth_request`.
 ///
 /// See: `Monitor::handle_auth_request`
 #[derive(Debug)]
@@ -162,6 +162,17 @@ impl Encode for AuthCapsInfo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct AuthRequestMore {
+    pub payload: Vec<u8>,
+}
+
+impl Encode for AuthRequestMore {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        self.payload.encode(buffer);
+    }
+}
+
 #[derive(Debug)]
 pub struct AuthTicket {
     pub name: EntityName,
@@ -191,18 +202,99 @@ impl Encode for AuthTicket {
     }
 }
 
-#[derive(Debug)]
-pub struct CephXServiceTicketInfo {
-    pub auth_ticket: AuthTicket,
-    pub session_key: CryptoKey,
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(u16)]
+pub enum CephXMessageType {
+    GetAuthSesssionKey = 0x0100,
+    GetPrincipalSessionKey = 0x0200,
+    GetRotatingKey = 0x0400,
 }
 
-impl CephXServiceTicketInfo {
-    pub fn encode_hazmat(&self, buffer: &mut Vec<u8>) {
-        // Struct version
-        buffer.push(1u8);
+#[derive(Debug)]
+pub struct CephXMessage<T>
+where
+    T: Encode,
+{
+    ty: CephXMessageType,
+    value: T,
+}
 
-        self.auth_ticket.encode(buffer);
-        self.session_key.encode_hazmat(buffer);
+impl<T> Encode for CephXMessage<T>
+where
+    T: Encode,
+{
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        (self.ty as u16).encode(buffer);
+        self.value.encode(buffer);
+    }
+}
+
+impl<T> CephXMessage<T>
+where
+    T: Encode,
+{
+    pub fn new(ty: CephXMessageType, value: T) -> Self {
+        Self { ty, value }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CephXAuthenticateKey(u64);
+
+impl CephXAuthenticateKey {
+    pub fn compute(
+        server_challenge: u64,
+        client_challenge: u64,
+        key: &CryptoKey,
+    ) -> CephXAuthenticateKey {
+        struct ChallengeBlob {
+            server_challenge: u64,
+            client_challenge: u64,
+        }
+
+        impl Encode for ChallengeBlob {
+            fn encode(&self, buffer: &mut Vec<u8>) {
+                self.server_challenge.encode(buffer);
+                self.client_challenge.encode(buffer);
+            }
+        }
+
+        let challenge_blob = ChallengeBlob {
+            server_challenge,
+            client_challenge,
+        }
+        .encode_encrypt(key);
+
+        let (chunks, _rem) = challenge_blob.as_chunks::<8>();
+
+        let mut k = 0;
+
+        for chunk in chunks {
+            let cur = u64::from_ne_bytes(*chunk);
+            k ^= cur;
+        }
+
+        Self(k)
+    }
+}
+
+#[derive(Debug)]
+pub struct CephXAuthenticate {
+    pub client_challenge: u64,
+    pub key: CephXAuthenticateKey,
+    pub old_ticket: CephXTicket,
+    // TODO: enum
+    pub other_keys: u32,
+}
+
+impl Encode for CephXAuthenticate {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        // Struct version
+        buffer.push(3u8);
+
+        self.client_challenge.encode(buffer);
+        self.key.0.encode(buffer);
+        self.old_ticket.encode(buffer);
+        self.other_keys.encode(buffer);
     }
 }

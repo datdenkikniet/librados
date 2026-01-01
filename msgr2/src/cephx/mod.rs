@@ -1,3 +1,10 @@
+use aes::cipher::{
+    BlockEncryptMut, KeyIvInit,
+    block_padding::{Padding, Pkcs7},
+};
+
+pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
+
 use crate::{Encode, Timestamp};
 
 pub struct CryptoKey {
@@ -26,21 +33,49 @@ impl CryptoKey {
         buffer.extend_from_slice(&self.secret);
     }
 
-    pub fn decode(data: &[u8]) -> Self {
-        let ty = u16::from_le_bytes(data[..2].try_into().unwrap());
-        let (created, used) = Timestamp::parse(&data[2..]).unwrap();
-        let data = &data[2 + used..];
+    pub fn encrypt(&self, data: &mut Vec<u8>) {
+        // TODO: this is so bad...
+        let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
+        let secret = secret.into();
+        let data_len = data.len();
 
-        let len = u16::from_le_bytes(data[..2].try_into().unwrap());
-        assert_eq!(data[2..].len(), len as usize);
+        // TODO: this is so bad...
+        let iv = (*CEPH_AES_IV).into();
+        let aes = cbc::Encryptor::<aes::Aes128>::new(&secret, &iv);
+        data.resize(data_len + 16 * 2, 0);
 
-        let secret = data[2..].to_vec();
+        let res = aes.encrypt_padded_mut::<Pkcs7>(data, data_len).unwrap();
+        let res_len = res.len();
+        data.truncate(res_len);
+    }
 
-        Self {
+    pub fn decode(data: &[u8]) -> Result<Self, String> {
+        let Some((ty, data)) = data.split_first_chunk::<2>() else {
+            return Err(format!("Expected 2 bytes for key type."));
+        };
+
+        let ty = u16::from_le_bytes(*ty);
+        let (created, used) = Timestamp::parse(data).unwrap();
+        let data = &data[used..];
+
+        let Some((len, data)) = data.split_first_chunk::<2>() else {
+            return Err(format!("Expected 2 bytes for key len."));
+        };
+        let len = u16::from_le_bytes(*len);
+
+        if data.len() != len as usize {
+            return Err(format!(
+                "Expected {} bytes of key data, only got {}",
+                len,
+                data.len()
+            ));
+        }
+
+        Ok(Self {
             ty,
             created,
-            secret,
-        }
+            secret: data.to_vec(),
+        })
     }
 }
 

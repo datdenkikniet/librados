@@ -1,5 +1,5 @@
 mod ceph_features;
-mod cephx;
+pub mod cephx;
 pub mod connection;
 mod encode;
 mod entity_address;

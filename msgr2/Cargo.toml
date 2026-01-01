@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes = "0.8.4"
+cbc = "0.1.2"
 crc = "3.4.0"
 crc-catalog = "2.4.0"
 nix = { version = "0.30.1", default-features = false }

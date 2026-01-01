@@ -5,14 +5,15 @@ use std::{
 };
 
 use ceph_protocol::{
-    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType, Timestamp,
+    CephFeatureSet, Encode, EntityAddress, EntityAddressType, EntityName, EntityType, Timestamp,
+    cephx::CryptoKey,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{
-            AuthMethodCephX, AuthMethodNone, AuthRequest, CephXServerChallenge, CephXTicket,
-            ConMode,
+            AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, CephXAuthenticate,
+            CephXAuthenticateKey, CephXMessage, CephXServerChallenge, CephXTicket, ConMode,
         },
     },
 };
@@ -54,6 +55,7 @@ where
 }
 
 fn main() {
+    let master_key = CryptoKey::decode(include_bytes!("./key.bin")).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
     let config = Config::new(true);
@@ -105,7 +107,7 @@ fn main() {
     // };
 
     let method = AuthMethodCephX {
-        global_id: 1001,
+        global_id: u64::MAX,
         name,
     };
 
@@ -121,6 +123,27 @@ fn main() {
     let challenge = CephXServerChallenge::parse(&more.payload).unwrap();
 
     println!("Server challenge: {challenge:?}");
+
+    let client_challenge = 13377;
+    let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, &master_key);
+    let auth_req_more = AuthRequestMore {
+        payload: CephXMessage::new(
+            ceph_protocol::messages::auth::CephXMessageType::GetAuthSesssionKey,
+            CephXAuthenticate {
+                client_challenge,
+                key,
+                old_ticket: CephXTicket {
+                    secret_id: u64::MAX,
+                    blob: Vec::new(),
+                },
+                other_keys: 0,
+            },
+        )
+        .to_vec(),
+    };
+
+    let auth_req = connection.send_more(&auth_req_more);
+    send(auth_req, &mut stream);
 
     let rx_auth = match recv(&mut connection, &mut stream) {
         Message::AuthDone(m) => m,

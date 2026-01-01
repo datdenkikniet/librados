@@ -9,7 +9,9 @@ use crate::{
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
-        auth::{AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthSignature},
+        auth::{
+            AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
+        },
     },
 };
 
@@ -98,6 +100,13 @@ impl Connection<Authenticating> {
         request.encode(&mut self.buffer);
 
         Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.revision).unwrap()
+    }
+
+    pub fn send_more(&mut self, request: &AuthRequestMore) -> Frame<'_> {
+        self.buffer.clear();
+        request.encode(&mut self.buffer);
+
+        Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.revision).unwrap()
     }
 
     #[expect(unused)]
@@ -229,6 +238,7 @@ message! {
     ClientIdent,
     ServerIdent,
     AuthRequest,
+    AuthRequestMore,
     AuthReplyMore,
     AuthBadMethod,
     AuthDone,
@@ -252,6 +262,7 @@ impl Message {
             Message::KeepaliveAck(_) => Tag::Keepalive2Ack,
             Message::AuthBadMethod(_) => Tag::AuthBadMethod,
             Message::AuthReplyMore(_) => Tag::AuthReplyMore,
+            Message::AuthRequestMore(_) => Tag::AuthRequestMore,
         }
     }
 
@@ -270,6 +281,7 @@ impl Message {
             Message::KeepaliveAck(_) => todo!(),
             Message::AuthBadMethod(_) => todo!(),
             Message::AuthReplyMore(_) => todo!(),
+            Message::AuthRequestMore(auth_request_more) => auth_request_more.encode(buffer),
         }
     }
 
@@ -290,6 +302,7 @@ impl Message {
             Tag::AuthBadMethod => Ok(Self::AuthBadMethod(AuthBadMethod::parse(data)?)),
             Tag::AuthRequest => Ok(Self::AuthRequest(AuthRequest::parse(data)?)),
             Tag::AuthReplyMore => Ok(Self::AuthReplyMore(AuthReplyMore::parse(data)?)),
+            Tag::AuthRequestMore => todo!(),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }
