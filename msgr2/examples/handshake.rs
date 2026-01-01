@@ -106,10 +106,7 @@ fn main() {
     //     global_id: 1332,
     // };
 
-    let method = AuthMethodCephX {
-        global_id: u64::MAX,
-        name,
-    };
+    let method = AuthMethodCephX { global_id: 0, name };
 
     let auth_req = AuthRequest::new(method, vec![ConMode::Secure, ConMode::Crc]);
     let auth_req = connection.send_req(&auth_req);
