@@ -1,20 +1,22 @@
 use std::{
     io::{Read, Write},
     net::TcpStream,
-    u64,
 };
 
 use ceph_protocol::{
-    CephFeatureSet, Encode, EntityAddress, EntityAddressType, EntityName, EntityType, Timestamp,
-    cephx::CryptoKey,
+    CephFeatureSet, CryptoKey, Encode, EntityAddress, EntityAddressType, EntityName, EntityType,
+    Timestamp,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{
-            AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, AuthServiceTicketInfo,
-            CephXAuthenticate, CephXAuthenticateKey, CephXMessage, CephXMessageType,
-            CephXServerChallenge, CephXTicket, ConMode,
+            AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, CephXServerChallenge,
+            ConMode,
+        },
+        cephx::{
+            AuthServiceTicketInfo, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
+            CephXMessageType, CephXTicketBlob,
         },
     },
 };
@@ -127,7 +129,7 @@ fn main() {
     let auth = CephXAuthenticate {
         client_challenge,
         key,
-        old_ticket: CephXTicket {
+        old_ticket: CephXTicketBlob {
             secret_id: 0,
             blob: Vec::new(),
         },

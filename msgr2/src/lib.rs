@@ -1,18 +1,20 @@
 mod ceph_features;
-pub mod cephx;
 pub mod connection;
 mod encode;
 mod entity_address;
 mod entity_name;
 mod entity_type;
 pub mod frame;
+mod key;
 pub mod messages;
+mod crypto;
 
 pub use ceph_features::CephFeatureSet;
 pub use encode::Encode;
 pub use entity_address::{EntityAddress, EntityAddressType};
 pub use entity_name::EntityName;
 pub use entity_type::EntityType;
+pub use key::CryptoKey;
 
 mod sealed {
     pub trait Sealed {}
