@@ -4,8 +4,8 @@ use std::{
 };
 
 use ceph_protocol::{
-    CephFeatureSet, CryptoKey, Encode, EntityAddress, EntityAddressType, EntityName, EntityType,
-    Timestamp,
+    CephFeatureSet, CryptoKey, Decode, Encode, EntityAddress, EntityAddressType, EntityName,
+    EntityType, Timestamp,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
@@ -150,7 +150,7 @@ fn main() {
 
     println!("Auth rx: {rx_auth:?}");
 
-    let auth_done = CephXMessage::parse(&rx_auth.auth_payload).unwrap();
+    let (auth_done, _) = CephXMessage::decode(&rx_auth.auth_payload).unwrap();
     let tickets = auth_done.payload();
 
     match auth_done.ty() {
