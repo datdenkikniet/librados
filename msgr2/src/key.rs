@@ -1,7 +1,4 @@
-use aes::cipher::{
-    BlockEncryptMut, KeyIvInit,
-    block_padding::{Padding, Pkcs7},
-};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
 
@@ -47,6 +44,18 @@ impl CryptoKey {
         let res = aes.encrypt_padded_mut::<Pkcs7>(data, data_len).unwrap();
         let res_len = res.len();
         data.truncate(res_len);
+    }
+
+    pub fn decrypt<'a>(&self, data: &'a mut [u8]) -> &'a [u8] {
+        // TODO: this is so bad...
+        let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
+        let secret = secret.into();
+
+        // TODO: this is so bad...
+        let iv = (*CEPH_AES_IV).into();
+        let aes = cbc::Decryptor::<aes::Aes128>::new(&secret, &iv);
+
+        aes.decrypt_padded_mut::<Pkcs7>(data).unwrap()
     }
 
     pub fn decode(data: &[u8]) -> Result<Self, String> {

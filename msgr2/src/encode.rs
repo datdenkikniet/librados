@@ -1,7 +1,3 @@
-use crate::cephx::CryptoKey;
-
-pub const AUTH_MAGIC: u64 = 0xff009cad8826aa55;
-
 pub trait Encode {
     fn encode(&self, buffer: &mut Vec<u8>);
 
@@ -9,26 +5,6 @@ pub trait Encode {
         let mut vec = Vec::new();
         self.encode(&mut vec);
         vec
-    }
-
-    fn encode_encrypt_enc_bl(&self, key: &CryptoKey) -> Vec<u8> {
-        let mut buffer = Vec::new();
-
-        // Struct version
-        buffer.push(1u8);
-        AUTH_MAGIC.encode(&mut buffer);
-        self.encode(&mut buffer);
-
-        key.encrypt(&mut buffer);
-
-        buffer
-    }
-
-    fn encode_encrypt(&self, key: &CryptoKey) -> Vec<u8> {
-        let encode_encrypt_bl = self.encode_encrypt_enc_bl(&key);
-        let mut encoded = Vec::new();
-        encode_encrypt_bl.encode(&mut encoded);
-        encoded
     }
 }
 
