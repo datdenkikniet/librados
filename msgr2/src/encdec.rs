@@ -2,6 +2,84 @@
 
 use std::ops::RangeInclusive;
 
+macro_rules! write_encdec {
+    (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {
+        return Ok($struct { $($fields,)* });
+    };
+
+    (enc($self:ident, $buffer:ident): { }) => {};
+
+    (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        let Some((v, left)) = $buffer.split_first() else {
+            return Err($crate::DecodeError::NotEnoughData { have: 0, need: 1, field: Some("version") })
+        };
+
+        if *v != $val {
+            return Err($crate::DecodeError::UnexpectedVersion { got: *v, expected: $val..=$val })
+        }
+
+        *$buffer = left;
+        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
+    };
+
+    (enc($self:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? }) => {
+        $buffer.push($val as u8);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+    (dec($struct:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        #[allow(unused)]
+        let $field = $crate::Decode::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
+        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+    };
+
+    (enc($self:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? }) => {
+        $self.$field.encode($buffer);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+    (dec($struct:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        #[allow(unused)]
+        let $field = <$ty>::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
+        let $field = TryFrom::try_from($field)?;
+        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+    };
+
+    (enc($self:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? }) => {
+        <$ty>::from(&$self.$field).encode($buffer);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+
+    ($ty:ident<$lt:lifetime> = $($tt:tt)*) => {
+        impl<$lt> $crate::Decode<$lt> for $ty<$lt> {
+            fn decode(buffer: &mut &$lt [u8]) -> Result<Self, $crate::DecodeError> {
+                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+            }
+        }
+
+        impl $crate::Encode for $ty<'_> {
+            fn encode(&self, buffer: &mut Vec<u8>) {
+                write_encdec!(enc(self, buffer): { $($tt)* });
+            }
+        }
+    };
+
+    ($ty:ident = $($tt:tt)*) => {
+        impl $crate::Decode<'_> for $ty {
+            fn decode(buffer: &mut &[u8]) -> Result<Self, $crate::DecodeError> {
+                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+            }
+        }
+
+        impl $crate::Encode for $ty {
+            fn encode(&self, buffer: &mut Vec<u8>) {
+                write_encdec!(enc(self, buffer): { $($tt)* });
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone)]
 pub enum DecodeError {
     NotEnoughData {
@@ -37,8 +115,42 @@ impl DecodeError {
     }
 }
 
+pub struct WireString<'a>(&'a str);
+
+impl<'a> Decode<'a> for WireString<'a> {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, crate::DecodeError> {
+        let slice = <&[u8]>::decode(buffer)?;
+
+        if let Ok(str) = str::from_utf8(slice) {
+            Ok(Self(str))
+        } else {
+            Err(DecodeError::Custom(format!("Invalid string data.")))
+        }
+    }
+}
+
+impl Encode for WireString<'_> {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        self.0.as_bytes().encode(buffer);
+    }
+}
+
+impl<'a> From<&'a String> for WireString<'a> {
+    fn from(value: &'a String) -> Self {
+        Self(value)
+    }
+}
+
+impl TryFrom<WireString<'_>> for String {
+    type Error = DecodeError;
+
+    fn try_from(value: WireString) -> Result<Self, Self::Error> {
+        Ok(value.0.to_string())
+    }
+}
+
 pub trait Decode<'a>: Sized {
-    fn decode(buffer: &'a [u8]) -> Result<(Self, &'a [u8]), DecodeError>;
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError>;
 }
 
 pub trait Encode {
@@ -112,9 +224,10 @@ macro_rules! encode_int {
             }
 
             impl Decode<'_> for $int {
-                fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+                fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
                     if let Some((chunk, left)) = buffer.split_first_chunk() {
-                        Ok(((<$int>::from_le_bytes(*chunk)), left))
+                        *buffer = left;
+                        Ok(<$int>::from_le_bytes(*chunk))
                     } else {
                         Err(DecodeError::NotEnoughData { have: buffer.len(), need: <$int>::MAX.to_le_bytes().len(), field: None })
                     }
@@ -129,14 +242,15 @@ macro_rules! encode_int {
 encode_int!(u16, u32, u64, i8, i16, i32, i64);
 
 impl<'a> Decode<'a> for &'a [u8] {
-    fn decode(buffer: &'a [u8]) -> Result<(Self, &'a [u8]), DecodeError> {
-        let (len, left) = u32::decode(buffer)?;
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError> {
+        let len = u32::decode(buffer)?;
 
-        if let Some((me, left)) = left.split_at_checked(len as usize) {
-            Ok((me, left))
+        if let Some((me, left)) = buffer.split_at_checked(len as usize) {
+            *buffer = left;
+            Ok(me)
         } else {
             Err(DecodeError::NotEnoughData {
-                have: left.len(),
+                have: buffer.len(),
                 need: len as _,
                 field: None,
             })
@@ -145,8 +259,7 @@ impl<'a> Decode<'a> for &'a [u8] {
 }
 
 impl Decode<'_> for Vec<u8> {
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (slice, left) = <&[u8]>::decode(buffer)?;
-        Ok((slice.to_vec(), left))
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        Ok(<&[u8]>::decode(buffer)?.to_vec())
     }
 }

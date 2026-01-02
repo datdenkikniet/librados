@@ -2,83 +2,6 @@ use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityName, Timestamp, crypto::encode_encrypt,
 };
 
-macro_rules! write_encdec {
-    (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {
-        return Ok(($struct { $($fields,)* }, $buffer));
-    };
-
-    (enc($self:ident, $buffer:ident): { }) => {};
-
-    (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        let Some((v, left)) = $buffer.split_first() else {
-            return Err($crate::DecodeError::NotEnoughData { have: 0, need: 1, field: Some("version") })
-        };
-
-        if *v != $val {
-            return Err($crate::DecodeError::UnexpectedVersion { got: *v, expected: $val..=$val })
-        }
-
-        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)*);
-    };
-
-    (enc($self:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? }) => {
-        $buffer.push($val as u8);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
-    };
-
-    (dec($struct:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        #[allow(unused)]
-        let ($field, left) = $crate::Decode::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
-        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)* $field);
-    };
-
-    (enc($self:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? }) => {
-        $self.$field.encode($buffer);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
-    };
-
-    (dec($struct:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        #[allow(unused)]
-        let ($field, left) = <$ty>::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
-        let $field = TryFrom::try_from($field)?;
-        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)* $field);
-    };
-
-    (enc($self:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? }) => {
-        <$ty>::from($self.$field).encode($buffer);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
-    };
-
-
-    ($ty:ident<$lt:lifetime> = $($tt:tt)*) => {
-        impl<$lt> $crate::Decode<$lt> for $ty<$lt> {
-            fn decode(buffer: &$lt [u8]) -> Result<(Self, &$lt [u8]), $crate::DecodeError> {
-                write_encdec!(dec($ty, buffer): { $($tt)* } with);
-            }
-        }
-
-        impl $crate::Encode for $ty<'_> {
-            fn encode(&self, buffer: &mut Vec<u8>) {
-                write_encdec!(enc(self, buffer): { $($tt)* });
-            }
-        }
-    };
-
-    ($ty:ident = $($tt:tt)*) => {
-        impl $crate::Decode<'_> for $ty {
-            fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), $crate::DecodeError> {
-                write_encdec!(dec($ty, buffer): { $($tt)* } with);
-            }
-        }
-
-        impl $crate::Encode for $ty {
-            fn encode(&self, buffer: &mut Vec<u8>) {
-                write_encdec!(enc(self, buffer): { $($tt)* });
-            }
-        }
-    };
-}
-
 write_encdec!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
 #[derive(Debug)]
@@ -95,9 +18,9 @@ pub enum CephXMessageType {
     GetRotatingKey = 0x0400,
 }
 
-impl From<CephXMessageType> for u16 {
-    fn from(value: CephXMessageType) -> Self {
-        value as u16
+impl From<&CephXMessageType> for u16 {
+    fn from(value: &CephXMessageType) -> Self {
+        *value as u16
     }
 }
 
@@ -163,16 +86,13 @@ impl CephXMessage {
 }
 
 impl Decode<'_> for CephXMessage {
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (header, left) = CephXResponseHeader::decode(buffer)?;
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        let header = CephXResponseHeader::decode(buffer)?;
         if header.status == 0 {
-            Ok((
-                Self {
-                    ty: header.ty,
-                    payload: left.to_vec(),
-                },
-                &[],
-            ))
+            Ok(Self {
+                ty: header.ty,
+                payload: buffer.to_vec(),
+            })
         } else {
             Err(DecodeError::Custom(format!(
                 "CephX error. Status: {}",
