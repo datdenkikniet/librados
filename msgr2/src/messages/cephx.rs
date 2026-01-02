@@ -1,65 +1,90 @@
-use crate::{CryptoKey, Encode, EntityName, Timestamp, crypto::encode_encrypt};
+use crate::{
+    CryptoKey, Decode, DecodeError, Encode, EntityName, Timestamp, crypto::encode_encrypt,
+};
+
+macro_rules! write_encdec {
+    (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {
+        return Ok(($struct { $($fields,)* }, $buffer));
+    };
+
+    (enc($self:ident, $buffer:ident): { }) => {};
+
+    (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        let Some((v, left)) = $buffer.split_first() else {
+            return Err($crate::DecodeError::NotEnoughData { have: 0, need: 1, field: Some("version") })
+        };
+
+        if *v != $val {
+            return Err($crate::DecodeError::UnexpectedVersion { got: *v, expected: $val..=$val })
+        }
+
+        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)*);
+    };
+
+    (enc($self:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? }) => {
+        $buffer.push($val as u8);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+    (dec($struct:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        #[allow(unused)]
+        let ($field, left) = $crate::Decode::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
+        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)* $field);
+    };
+
+    (enc($self:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? }) => {
+        $self.$field.encode($buffer);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+    (dec($struct:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        #[allow(unused)]
+        let ($field, left) = <$ty>::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
+        let $field = TryFrom::try_from($field)?;
+        write_encdec!(dec($struct, left): { $($($tt)*)? } with $($fields)* $field);
+    };
+
+    (enc($self:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? }) => {
+        <$ty>::from($self.$field).encode($buffer);
+        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+
+    ($ty:ident<$lt:lifetime> = $($tt:tt)*) => {
+        impl<$lt> $crate::Decode<$lt> for $ty<$lt> {
+            fn decode(buffer: &$lt [u8]) -> Result<(Self, &$lt [u8]), $crate::DecodeError> {
+                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+            }
+        }
+
+        impl $crate::Encode for $ty<'_> {
+            fn encode(&self, buffer: &mut Vec<u8>) {
+                write_encdec!(enc(self, buffer): { $($tt)* });
+            }
+        }
+    };
+
+    ($ty:ident = $($tt:tt)*) => {
+        impl $crate::Decode<'_> for $ty {
+            fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), $crate::DecodeError> {
+                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+            }
+        }
+
+        impl $crate::Encode for $ty {
+            fn encode(&self, buffer: &mut Vec<u8>) {
+                write_encdec!(enc(self, buffer): { $($tt)* });
+            }
+        }
+    };
+}
+
+write_encdec!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
 #[derive(Debug)]
 pub struct CephXTicketBlob {
     pub secret_id: u64,
     pub blob: Vec<u8>,
-}
-
-impl CephXTicketBlob {
-    pub fn parse(data: &[u8]) -> Result<(Self, usize), String> {
-        if data.len() < 5 {
-            return Err(format!(
-                "Expected at least 5 bytes of CephXTicket data, got only {}",
-                data.len()
-            ));
-        }
-
-        if data[0] != 1 {
-            return Err(format!(
-                "Expected version 1 for CephXTicket, got {}",
-                data[0]
-            ));
-        }
-
-        let Some((secret_id, blob)) = data[1..].split_first_chunk::<8>() else {
-            return Err(format!(
-                "Expected at least 8 bytes of secret ID data, got only {}",
-                data[1..].len()
-            ));
-        };
-
-        let secret_id = u64::from_le_bytes(*secret_id);
-
-        let Some((blob_len, blob)) = data.split_first_chunk::<4>() else {
-            return Err(format!(
-                "Expected at least 4 bytes of blob len data, got only {}",
-                blob.len()
-            ));
-        };
-
-        let blob_len = u32::from_le_bytes(*blob_len) as usize;
-
-        if blob.len() < blob_len {
-            return Err(format!(
-                "Expected at least {} bytes of blob data, got only {}",
-                blob_len,
-                blob.len()
-            ));
-        }
-
-        let blob = blob.to_vec();
-
-        Ok((Self { secret_id, blob }, 1 + 9 + 4 + blob_len))
-    }
-}
-
-impl Encode for CephXTicketBlob {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        buffer.push(1u8);
-        self.secret_id.encode(buffer);
-        self.blob.encode(buffer);
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,15 +95,26 @@ pub enum CephXMessageType {
     GetRotatingKey = 0x0400,
 }
 
+impl From<CephXMessageType> for u16 {
+    fn from(value: CephXMessageType) -> Self {
+        value as u16
+    }
+}
+
 impl TryFrom<u16> for CephXMessageType {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         let value = match value {
             0x0100 => Self::GetAuthSessionKey,
             0x0200 => Self::GetPrincipalSessionKey,
             0x0400 => Self::GetRotatingKey,
-            _ => return Err(()),
+            _ => {
+                return Err(DecodeError::UnknownValue {
+                    ty: "CephXMessageType",
+                    value: format!("{value}"),
+                });
+            }
         };
 
         Ok(value)
@@ -91,18 +127,7 @@ pub struct CephXResponseHeader {
     pub status: u32,
 }
 
-impl CephXResponseHeader {
-    pub fn parse(data: &[u8; 6]) -> Result<Self, String> {
-        let ty = u16::from_le_bytes(data[..2].try_into().unwrap());
-        let Ok(ty) = CephXMessageType::try_from(ty) else {
-            return Err(format!("Unknown cephx message type {}", ty));
-        };
-
-        let status = u32::from_le_bytes(data[2..6].try_into().unwrap());
-
-        Ok(Self { ty, status })
-    }
-}
+write_encdec!(CephXResponseHeader = ty as u16 | status);
 
 #[derive(Debug)]
 pub struct CephXMessage {
@@ -128,32 +153,32 @@ impl CephXMessage {
         }
     }
 
-    pub fn parse(data: &[u8]) -> Result<Self, String> {
-        let Some((header, payload)) = data.split_first_chunk::<6>() else {
-            return Err(format!(
-                "Need at least 6 bytes of data for CephXMessage, got only {}",
-                data.len()
-            ));
-        };
-
-        let header = CephXResponseHeader::parse(header)?;
-
-        if header.status == 0 {
-            Ok(Self {
-                ty: header.ty,
-                payload: payload.to_vec(),
-            })
-        } else {
-            Err(format!("Error: {}", header.status))
-        }
-    }
-
     pub fn ty(&self) -> CephXMessageType {
         self.ty
     }
 
     pub fn payload(&self) -> &[u8] {
         &self.payload
+    }
+}
+
+impl Decode<'_> for CephXMessage {
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let (header, left) = CephXResponseHeader::decode(buffer)?;
+        if header.status == 0 {
+            Ok((
+                Self {
+                    ty: header.ty,
+                    payload: left.to_vec(),
+                },
+                &[],
+            ))
+        } else {
+            Err(DecodeError::Custom(format!(
+                "CephX error. Status: {}",
+                header.status
+            )))
+        }
     }
 }
 
