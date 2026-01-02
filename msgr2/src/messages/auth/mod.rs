@@ -9,7 +9,8 @@ pub use done::AuthDone;
 pub use reply_more::{AuthReplyMore, CephXServerChallenge};
 pub use request::{
     AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, AuthRequestPayload,
-    CephXAuthenticate, CephXAuthenticateKey, CephXMessage, CephXMessageType, CephXTicket,
+    AuthServiceTicketInfo, CephXAuthenticate, CephXAuthenticateKey, CephXMessage, CephXMessageType,
+    CephXTicket,
 };
 pub use signature::AuthSignature;
 

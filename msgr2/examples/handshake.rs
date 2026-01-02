@@ -12,8 +12,9 @@ use ceph_protocol::{
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{
-            AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, CephXAuthenticate,
-            CephXAuthenticateKey, CephXMessage, CephXServerChallenge, CephXTicket, ConMode,
+            AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, AuthServiceTicketInfo,
+            CephXAuthenticate, CephXAuthenticateKey, CephXMessage, CephXMessageType,
+            CephXServerChallenge, CephXTicket, ConMode,
         },
     },
 };
@@ -123,20 +124,18 @@ fn main() {
 
     let client_challenge = 13377;
     let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, &master_key);
+    let auth = CephXAuthenticate {
+        client_challenge,
+        key,
+        old_ticket: CephXTicket {
+            secret_id: 0,
+            blob: Vec::new(),
+        },
+        other_keys: u8::from(EntityType::Mon) as u32,
+    };
+
     let auth_req_more = AuthRequestMore {
-        payload: CephXMessage::new(
-            ceph_protocol::messages::auth::CephXMessageType::GetAuthSesssionKey,
-            CephXAuthenticate {
-                client_challenge,
-                key,
-                old_ticket: CephXTicket {
-                    secret_id: u64::MAX,
-                    blob: Vec::new(),
-                },
-                other_keys: 0,
-            },
-        )
-        .to_vec(),
+        payload: CephXMessage::new(CephXMessageType::GetAuthSessionKey, auth).to_vec(),
     };
 
     let auth_req = connection.send_more(&auth_req_more);
@@ -148,6 +147,21 @@ fn main() {
     };
 
     println!("Auth rx: {rx_auth:?}");
+
+    let auth_done = CephXMessage::parse(&rx_auth.auth_payload).unwrap();
+    let tickets = auth_done.payload();
+
+    match auth_done.ty() {
+        CephXMessageType::GetAuthSessionKey => {
+            let cbl = AuthServiceTicketInfo::parse(&tickets);
+
+            // We are encrypted here: let's deal with that
+
+            // panic!("{cbl:?}");
+        }
+        _ => unreachable!(),
+    }
+
     let signature = connection.recv_done(&rx_auth);
     send(signature, &mut stream);
 
