@@ -1,4 +1,4 @@
-use crate::Encode;
+use crate::{DecodeError, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CephFeatureSet {
@@ -177,6 +177,23 @@ define_features! {
     (a: 62, INCARNATION_1, RESERVED);           // do not use; used as a sentinel
     (r: 63, INCARNATION_1, RESERVED_BROKEN); // client-facing
     // available
+}
+
+impl TryFrom<u64> for CephFeatureSet {
+    type Error = DecodeError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Ok(Self {
+            bits: value,
+            mask: value,
+        })
+    }
+}
+
+impl From<&CephFeatureSet> for u64 {
+    fn from(value: &CephFeatureSet) -> Self {
+        value.bits
+    }
 }
 
 impl CephFeatureSet {

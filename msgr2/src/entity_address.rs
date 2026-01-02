@@ -2,7 +2,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use nix::libc::{AF_INET, AF_INET6};
 
-use crate::Encode;
+use crate::{Decode, DecodeError, Encode};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityAddress {
@@ -66,39 +66,38 @@ impl Encode for EntityAddress {
     }
 }
 
-impl EntityAddress {
-    pub fn parse(data: &[u8]) -> Result<(usize, Self), String> {
+impl Decode<'_> for EntityAddress {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
         // TODO: length check!
 
         let mut used = 1;
-        let address_version = data[0];
+        let address_version = buffer[0];
         // 1 = has feature addr2 (is this msgr2?)
         assert_eq!(address_version, 1);
 
         used += 1;
-        let encoding_version = data[1];
+        let encoding_version = buffer[1];
         assert_eq!(encoding_version, 1);
 
         used += 1;
-        let encoding_compat = data[2];
+        let encoding_compat = buffer[2];
         assert_eq!(encoding_compat, 1);
 
-        let len = u32::from_le_bytes(data[3..7].try_into().unwrap());
-        assert!(data[7..].len() >= len as _);
+        let len = u32::from_le_bytes(buffer[3..7].try_into().unwrap());
+        assert!(buffer[7..].len() >= len as _);
         used += 4 + len;
 
-        let ty = u32::from_le_bytes(data[7..11].try_into().unwrap());
+        let ty = u32::from_le_bytes(buffer[7..11].try_into().unwrap());
 
-        let ty =
-            EntityAddressType::try_from(ty).map_err(|_| format!("Unknown entity type {}", ty))?;
+        let ty = EntityAddressType::try_from(ty)?;
 
-        let nonce = u32::from_le_bytes(data[11..15].try_into().unwrap());
+        let nonce = u32::from_le_bytes(buffer[11..15].try_into().unwrap());
 
-        let address_len = u32::from_le_bytes(data[15..19].try_into().unwrap()) as usize;
+        let address_len = u32::from_le_bytes(buffer[15..19].try_into().unwrap()) as usize;
 
         let address = if address_len != 0 {
-            let family = u16::from_le_bytes(data[19..21].try_into().unwrap());
-            let data = &data[21..21 + (address_len - 2)];
+            let family = u16::from_le_bytes(buffer[19..21].try_into().unwrap());
+            let data = &buffer[21..21 + (address_len - 2)];
 
             if family as i32 == AF_INET {
                 let port = u16::from_be_bytes(data[..2].try_into().unwrap());
@@ -115,13 +114,15 @@ impl EntityAddress {
                     address, port, flowinfo, scope_id,
                 )))
             } else {
-                return Err(format!("Unknown address family {}", family));
+                return Err(DecodeError::unknown_value("AddressFamily", family));
             }
         } else {
             None
         };
 
-        Ok((used as _, Self { nonce, ty, address }))
+        *buffer = &buffer[used as _..];
+
+        Ok(Self { nonce, ty, address })
     }
 }
 
@@ -138,7 +139,7 @@ pub enum EntityAddressType {
 }
 
 impl TryFrom<u32> for EntityAddressType {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         let res = match value {
@@ -147,14 +148,16 @@ impl TryFrom<u32> for EntityAddressType {
             2 => Self::Msgr2,
             3 => Self::Any,
             4 => Self::Cidr,
-            _ => return Err(()),
+            _ => {
+                return Err(DecodeError::unknown_value("EntityAddressType", value));
+            }
         };
 
         Ok(res)
     }
 }
 impl TryFrom<u8> for EntityAddressType {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         Self::try_from(value as u32)

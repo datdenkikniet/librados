@@ -2,7 +2,7 @@ use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pk
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
 
-use crate::{Encode, Timestamp};
+use crate::{Decode, Encode, Timestamp};
 
 pub struct CryptoKey {
     ty: u16,
@@ -59,13 +59,12 @@ impl CryptoKey {
     }
 
     pub fn decode(data: &[u8]) -> Result<Self, String> {
-        let Some((ty, data)) = data.split_first_chunk::<2>() else {
+        let Some((ty, mut data)) = data.split_first_chunk::<2>() else {
             return Err(format!("Expected 2 bytes for key type."));
         };
 
         let ty = u16::from_le_bytes(*ty);
-        let (created, used) = Timestamp::parse(data).unwrap();
-        let data = &data[used..];
+        let created = Timestamp::decode(&mut data).unwrap();
 
         let Some((len, data)) = data.split_first_chunk::<2>() else {
             return Err(format!("Expected 2 bytes for key len."));

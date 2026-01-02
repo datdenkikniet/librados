@@ -120,7 +120,7 @@ fn main() {
         o => panic!("Expected AuthReplyMore, got {o:?}"),
     };
 
-    let challenge = CephXServerChallenge::parse(&more.payload).unwrap();
+    let challenge = CephXServerChallenge::decode(&mut more.payload.as_slice()).unwrap();
 
     println!("Server challenge: {challenge:?}");
 

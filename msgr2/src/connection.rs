@@ -3,7 +3,7 @@ pub mod states;
 use states::{Active, Established, ExchangeHello, Inactive};
 
 use crate::{
-    Encode,
+    Decode, DecodeError, Encode,
     connection::states::{Authenticating, Identifying},
     frame::{Frame, Msgr2Revision, Preamble, Tag},
     messages::{
@@ -204,12 +204,13 @@ where
         Ok(preamble)
     }
 
-    pub fn recv(&mut self, frame: Frame) -> Result<Message, String> {
+    pub fn recv(&mut self, frame: Frame) -> Result<Message, DecodeError> {
         assert!(
             frame.segments().len() == 1,
             "Multi-segment frames not supported yet."
         );
-        Ok(Message::parse(frame.tag(), frame.segments()[0])?)
+
+        Ok(Message::decode(frame.tag(), frame.segments()[0])?)
     }
 }
 
@@ -285,24 +286,21 @@ impl Message {
         }
     }
 
-    pub fn parse(tag: Tag, data: &[u8]) -> Result<Self, String> {
+    pub fn decode(tag: Tag, mut data: &[u8]) -> Result<Self, DecodeError> {
         match tag {
-            Tag::Hello => Ok(Self::Hello(Hello::parse(&data)?)),
-            Tag::ClientIdent => Ok(Self::ClientIdent(ClientIdent::parse(data)?)),
-            Tag::AuthDone => Ok(Self::AuthDone(AuthDone::parse(data)?)),
-            Tag::AuthSignature => Ok(Self::AuthSignature(AuthSignature::parse(data)?)),
+            Tag::Hello => Ok(Self::Hello(Hello::decode(&mut data)?)),
+            Tag::ClientIdent => Ok(Self::ClientIdent(ClientIdent::decode(&mut data)?)),
+            Tag::AuthDone => Ok(Self::AuthDone(AuthDone::decode(&mut data)?)),
+            Tag::AuthSignature => Ok(Self::AuthSignature(AuthSignature::decode(&mut data)?)),
             Tag::IdentMissingFeatures => Ok(Self::IdentMissingFeatures(
-                IdentMissingFeatures::parse(data)
-                    .ok_or("Incorrect amount of data for ident missing features")?,
+                IdentMissingFeatures::decode(&mut data)?,
             )),
-            Tag::ServerIdent => Ok(Self::ServerIdent(ServerIdent::parse(data)?)),
-            Tag::Keepalive2Ack => Ok(Self::KeepaliveAck(
-                KeepaliveAck::parse(data).ok_or("Incorrect amount of data for keep alive ack")?,
-            )),
-            Tag::AuthBadMethod => Ok(Self::AuthBadMethod(AuthBadMethod::parse(data)?)),
-            Tag::AuthRequest => Ok(Self::AuthRequest(AuthRequest::parse(data)?)),
-            Tag::AuthReplyMore => Ok(Self::AuthReplyMore(AuthReplyMore::parse(data)?)),
-            Tag::AuthRequestMore => todo!(),
+            Tag::ServerIdent => Ok(Self::ServerIdent(ServerIdent::decode(&mut data)?)),
+            Tag::Keepalive2Ack => Ok(Self::KeepaliveAck(KeepaliveAck::decode(&mut data)?)),
+            Tag::AuthBadMethod => Ok(Self::AuthBadMethod(AuthBadMethod::decode(&mut data)?)),
+            Tag::AuthRequest => Ok(Self::AuthRequest(AuthRequest::decode(&mut data)?)),
+            Tag::AuthReplyMore => Ok(Self::AuthReplyMore(AuthReplyMore::decode(&mut data)?)),
+            Tag::AuthRequestMore => Ok(Self::AuthRequestMore(AuthRequestMore::decode(&mut data)?)),
             _ => todo!("Unsupported tag {tag:?}"),
         }
     }

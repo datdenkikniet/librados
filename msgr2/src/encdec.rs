@@ -2,7 +2,7 @@
 
 use std::ops::RangeInclusive;
 
-macro_rules! write_encdec {
+macro_rules! write_decode_encode {
     (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {
         return Ok($struct { $($fields,)* });
     };
@@ -15,52 +15,60 @@ macro_rules! write_encdec {
         };
 
         if *v != $val {
-            return Err($crate::DecodeError::UnexpectedVersion { got: *v, expected: $val..=$val })
+            return Err($crate::DecodeError::UnexpectedVersion { ty: stringify!($struct), got: *v, expected: $val..=$val })
         }
 
         *$buffer = left;
-        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
+        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
     };
 
     (enc($self:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? }) => {
         $buffer.push($val as u8);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
+    };
+
+    (dec($struct:ident, $buffer:ident): { const $val:literal as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        let _value = <$ty>::decode($buffer)?;
+        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
+    };
+
+    (enc($self:ident, $buffer:ident): { const $val:literal as $ty:ty $(| $($tt:tt)*)? }) => {
+        $val.encode($buffer);
+        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
     (dec($struct:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        #[allow(unused)]
         let $field = $crate::Decode::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
-        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
     };
 
     (enc($self:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? }) => {
         $self.$field.encode($buffer);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
     (dec($struct:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        #[allow(unused)]
         let $field = <$ty>::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
         let $field = TryFrom::try_from($field)?;
-        write_encdec!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
     };
 
     (enc($self:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? }) => {
         <$ty>::from(&$self.$field).encode($buffer);
-        write_encdec!(enc($self, $buffer): { $($($tt)*)? });
+        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
 
     ($ty:ident<$lt:lifetime> = $($tt:tt)*) => {
         impl<$lt> $crate::Decode<$lt> for $ty<$lt> {
             fn decode(buffer: &mut &$lt [u8]) -> Result<Self, $crate::DecodeError> {
-                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+                write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
             }
         }
 
         impl $crate::Encode for $ty<'_> {
             fn encode(&self, buffer: &mut Vec<u8>) {
-                write_encdec!(enc(self, buffer): { $($tt)* });
+                write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
     };
@@ -68,13 +76,13 @@ macro_rules! write_encdec {
     ($ty:ident = $($tt:tt)*) => {
         impl $crate::Decode<'_> for $ty {
             fn decode(buffer: &mut &[u8]) -> Result<Self, $crate::DecodeError> {
-                write_encdec!(dec($ty, buffer): { $($tt)* } with);
+                write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
             }
         }
 
         impl $crate::Encode for $ty {
             fn encode(&self, buffer: &mut Vec<u8>) {
-                write_encdec!(enc(self, buffer): { $($tt)* });
+                write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
     };
@@ -88,6 +96,7 @@ pub enum DecodeError {
         need: usize,
     },
     UnexpectedVersion {
+        ty: &'static str,
         got: u8,
         expected: RangeInclusive<u8>,
     },
@@ -99,6 +108,13 @@ pub enum DecodeError {
 }
 
 impl DecodeError {
+    pub fn unknown_value<T: core::fmt::Display>(ty: &'static str, value: T) -> Self {
+        Self::UnknownValue {
+            ty,
+            value: format!("{value}"),
+        }
+    }
+
     pub fn for_field(self, field: &'static str) -> Self {
         match self {
             DecodeError::NotEnoughData {
@@ -261,5 +277,58 @@ impl<'a> Decode<'a> for &'a [u8] {
 impl Decode<'_> for Vec<u8> {
     fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
         Ok(<&[u8]>::decode(buffer)?.to_vec())
+    }
+}
+
+impl<'a, T> Decode<'a> for Vec<T>
+where
+    T: Decode<'a> + 'a,
+{
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError> {
+        let len = u32::decode(buffer)? as usize;
+        let mut res = Vec::with_capacity(len);
+
+        for _ in 0..len {
+            res.push(T::decode(buffer)?);
+        }
+
+        Ok(res)
+    }
+}
+
+impl<const N: usize> Decode<'_> for [u8; N] {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        if let Some((chunk, left)) = buffer.split_first_chunk() {
+            *buffer = left;
+            Ok(*chunk)
+        } else {
+            Err(DecodeError::NotEnoughData {
+                field: None,
+                have: buffer.len(),
+                need: N,
+            })
+        }
+    }
+}
+
+impl Encode for bool {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        buffer.push(*self as u8)
+    }
+}
+
+impl Decode<'_> for bool {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
+        let Some((v, left)) = buffer.split_first() else {
+            return Err(DecodeError::NotEnoughData {
+                have: 0,
+                need: 1,
+                field: Some("version"),
+            });
+        };
+
+        *buffer = left;
+
+        Ok(*v != 0)
     }
 }

@@ -1,24 +1,15 @@
-use crate::{Encode, Timestamp};
+use crate::Timestamp;
 
 #[derive(Debug, Clone)]
 pub struct Keepalive {
     pub timestamp: Timestamp,
 }
 
-impl Encode for Keepalive {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        self.timestamp.encode(buffer);
-    }
-}
+write_decode_encode!(Keepalive = timestamp);
 
 #[derive(Debug, Clone)]
 pub struct KeepaliveAck {
     pub timestamp: Timestamp,
 }
 
-impl KeepaliveAck {
-    pub fn parse(data: &[u8]) -> Option<Self> {
-        let (ts, _) = Timestamp::parse(&data)?;
-        Some(Self { timestamp: ts })
-    }
-}
+write_decode_encode!(KeepaliveAck = timestamp);

@@ -12,7 +12,7 @@ pub use request::{
 };
 pub use signature::AuthSignature;
 
-use crate::Encode;
+use crate::{Decode, DecodeError, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMethod {
@@ -22,34 +22,44 @@ pub enum AuthMethod {
     Gss = 4,
 }
 
-impl From<AuthMethod> for u8 {
+impl From<AuthMethod> for u32 {
     fn from(value: AuthMethod) -> Self {
-        value as _
+        value as u32
     }
 }
 
 impl TryFrom<u32> for AuthMethod {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
-        let value = u8::try_from(value).map_err(|_| ())?;
-        Self::try_from(value)
-    }
-}
-
-impl TryFrom<u8> for AuthMethod {
-    type Error = ();
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
         let res = match value {
             0 => Self::Unknown,
             1 => Self::None,
             2 => Self::CephX,
             3 => Self::Gss,
-            _ => return Err(()),
+            _ => {
+                return Err(DecodeError::UnknownValue {
+                    ty: "AuthMethod",
+                    value: format!("{value}"),
+                });
+            }
         };
 
         Ok(res)
+    }
+}
+
+impl Encode for AuthMethod {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        u32::from(*self).encode(buffer);
+    }
+}
+
+impl Decode<'_> for AuthMethod {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
+        let value = u32::decode(buffer)?;
+
+        Self::try_from(value)
     }
 }
 
@@ -67,34 +77,39 @@ impl From<ConMode> for u8 {
 }
 
 impl TryFrom<u32> for ConMode {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
-        let value = u8::try_from(value).map_err(|_| ())?;
+        let value =
+            u8::try_from(value).map_err(|_| DecodeError::unknown_value("ConMode", value))?;
         Self::try_from(value)
     }
 }
 
 impl TryFrom<u8> for ConMode {
-    type Error = ();
+    type Error = DecodeError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         let res = match value {
             0 => Self::Unknown,
             1 => Self::Crc,
             2 => Self::Secure,
-            _ => return Err(()),
+            _ => return Err(DecodeError::unknown_value("ConMode", value)),
         };
 
         Ok(res)
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ConModeU32(pub ConMode);
-
-impl Encode for ConModeU32 {
+impl Encode for ConMode {
     fn encode(&self, buffer: &mut Vec<u8>) {
-        u32::from(self.0 as u8).encode(buffer);
+        u32::from(u8::from(*self)).encode(buffer);
+    }
+}
+
+impl Decode<'_> for ConMode {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        let value = u32::decode(buffer)?;
+        Self::try_from(value)
     }
 }

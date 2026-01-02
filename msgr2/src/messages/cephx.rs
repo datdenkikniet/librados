@@ -2,7 +2,7 @@ use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityName, Timestamp, crypto::encode_encrypt,
 };
 
-write_encdec!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
+write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
 #[derive(Debug)]
 pub struct CephXTicketBlob {
@@ -33,10 +33,7 @@ impl TryFrom<u16> for CephXMessageType {
             0x0200 => Self::GetPrincipalSessionKey,
             0x0400 => Self::GetRotatingKey,
             _ => {
-                return Err(DecodeError::UnknownValue {
-                    ty: "CephXMessageType",
-                    value: format!("{value}"),
-                });
+                return Err(DecodeError::unknown_value("CephXMessageType", value));
             }
         };
 
@@ -50,7 +47,7 @@ pub struct CephXResponseHeader {
     pub status: u32,
 }
 
-write_encdec!(CephXResponseHeader = ty as u16 | status);
+write_decode_encode!(CephXResponseHeader = ty as u16 | status);
 
 #[derive(Debug)]
 pub struct CephXMessage {
@@ -105,6 +102,20 @@ impl Decode<'_> for CephXMessage {
 #[derive(Debug, Clone, Copy)]
 pub struct CephXAuthenticateKey(u64);
 
+impl From<&CephXAuthenticateKey> for u64 {
+    fn from(value: &CephXAuthenticateKey) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<u64> for CephXAuthenticateKey {
+    type Error = DecodeError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Ok(Self(value))
+    }
+}
+
 impl CephXAuthenticateKey {
     pub fn compute(
         server_challenge: u64,
@@ -152,17 +163,7 @@ pub struct CephXAuthenticate {
     pub other_keys: u32,
 }
 
-impl Encode for CephXAuthenticate {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        // Struct version
-        buffer.push(3u8);
-
-        self.client_challenge.encode(buffer);
-        self.key.0.encode(buffer);
-        self.old_ticket.encode(buffer);
-        self.other_keys.encode(buffer);
-    }
-}
+write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys);
 
 #[derive(Debug)]
 pub struct AuthCapsInfo {
@@ -170,14 +171,7 @@ pub struct AuthCapsInfo {
     pub caps: Vec<u8>,
 }
 
-impl Encode for AuthCapsInfo {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        // Struct version
-        buffer.push(1u8);
-        buffer.push(self.allow_all as u8);
-        self.caps.encode(buffer);
-    }
-}
+write_decode_encode!(AuthCapsInfo = const version 1 as u8 | allow_all | caps);
 
 #[derive(Debug)]
 pub struct AuthTicket {
@@ -190,23 +184,7 @@ pub struct AuthTicket {
     pub flags: u32,
 }
 
-impl Encode for AuthTicket {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        // Struct version
-        buffer.push(2u8);
-
-        self.name.encode(buffer);
-        self.global_id.encode(buffer);
-
-        // CEPH_AUTH_UID_DEFAULT
-        u64::MAX.encode(buffer);
-
-        self.created.encode(buffer);
-        self.expires.encode(buffer);
-        self.caps.encode(buffer);
-        self.flags.encode(buffer);
-    }
-}
+write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | const 0xFFFF_FFFF_FFFF_FFFFu64 as u64 | created | expires | caps | flags);
 
 #[derive(Debug)]
 pub struct AuthServiceTicketInfo {}
