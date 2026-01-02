@@ -1,4 +1,4 @@
-use crate::{DecodeError, Encode};
+use crate::DecodeError;
 
 /// The type of entity we are talking to (MON, MDS, OSD, CLIENT or MGR).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +38,12 @@ impl From<&EntityType> for u32 {
     }
 }
 
+impl From<&EntityType> for u8 {
+    fn from(value: &EntityType) -> Self {
+        u8::from(*value)
+    }
+}
+
 impl TryFrom<u8> for EntityType {
     type Error = DecodeError;
 
@@ -51,10 +57,7 @@ impl TryFrom<u8> for EntityType {
             0x20 => Self::Auth,
             0xFF => Self::Any,
             _ => {
-                return Err(DecodeError::UnknownValue {
-                    ty: "EntityType",
-                    value: format!("{value}"),
-                });
+                return Err(DecodeError::unknown_value("EntityType", value));
             }
         };
 
@@ -68,16 +71,7 @@ impl TryFrom<u32> for EntityType {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match u8::try_from(value) {
             Ok(v) => EntityType::try_from(v),
-            Err(_) => Err(DecodeError::UnknownValue {
-                ty: "EntityType",
-                value: format!("{value}"),
-            }),
+            Err(_) => Err(DecodeError::unknown_value("EntityType", value)),
         }
-    }
-}
-
-impl Encode for EntityType {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        buffer.push(u8::from(*self))
     }
 }

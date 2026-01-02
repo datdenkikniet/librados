@@ -6,4 +6,4 @@ pub struct EntityName {
     pub name: String,
 }
 
-write_encdec!(EntityName = ty as u32 | name as crate::WireString);
+write_decode_encode!(EntityName = ty as u32 | name as crate::WireString);

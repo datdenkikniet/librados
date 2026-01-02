@@ -1,4 +1,4 @@
-use crate::{Encode, EntityType, entity_address::EntityAddress};
+use crate::{Decode, DecodeError, Encode, EntityType, entity_address::EntityAddress};
 
 #[derive(Debug, Clone)]
 pub struct Hello {
@@ -16,11 +16,19 @@ impl Encode for Hello {
     }
 }
 
-impl Hello {
-    pub fn parse(data: &[u8]) -> Result<Self, String> {
-        let entity_type = EntityType::try_from(data[0])
-            .map_err(|_| format!("Unknown entity type {}", data[0]))?;
-        let (_, address) = EntityAddress::parse(&data[1..])?;
+impl Decode<'_> for Hello {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, crate::DecodeError> {
+        let (entity_type, rest) = buffer.split_first().ok_or(DecodeError::NotEnoughData {
+            field: Some("entity_type"),
+            have: buffer.len(),
+            need: 1,
+        })?;
+
+        let entity_type = EntityType::try_from(*entity_type)?;
+
+        *buffer = rest;
+
+        let address = EntityAddress::decode(buffer)?;
 
         Ok(Self {
             entity_type,
@@ -36,7 +44,7 @@ fn valid_hello() {
         0, 0, 0, 0, 0, 0, 0, 0,
     ];
 
-    let _hello = Hello::parse(&data[..]).unwrap();
+    let _hello = Hello::decode(&mut &data[..]).unwrap();
 }
 
 #[test]
@@ -60,7 +68,7 @@ fn round_trip() {
 
     println!("{:?}", hello_buffer);
 
-    let output_hello = Hello::parse(&hello_buffer).unwrap();
+    let output_hello = Hello::decode(&mut hello_buffer.as_slice()).unwrap();
 
     assert_eq!(output_hello.entity_type, hello.entity_type);
     assert_eq!(output_hello.peer_address, hello.peer_address);

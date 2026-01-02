@@ -7,38 +7,4 @@ pub struct AuthDone {
     pub auth_payload: Vec<u8>,
 }
 
-impl AuthDone {
-    pub fn parse(data: &[u8]) -> Result<Self, String> {
-        if data.len() < 16 {
-            return Err(format!(
-                "Expected at least 16 bytes of auth done data, got only {}",
-                data.len()
-            ));
-        }
-
-        let global_id = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let connection_mode = u32::from_le_bytes(data[8..12].try_into().unwrap());
-
-        let Ok(connection_mode) = ConMode::try_from(connection_mode) else {
-            return Err(format!("Unknown connection mode {}", connection_mode));
-        };
-
-        let payload_bytes = u32::from_le_bytes(data[12..16].try_into().unwrap());
-
-        if data[16..].len() as u32 != payload_bytes {
-            return Err(format!(
-                "Expected {} bytes of auth payload data, got only {}",
-                payload_bytes,
-                data[16..].len()
-            ));
-        }
-
-        let auth_payload = data[16..].to_vec();
-
-        Ok(Self {
-            global_id,
-            connection_mode,
-            auth_payload,
-        })
-    }
-}
+write_decode_encode!(AuthDone = global_id | connection_mode | auth_payload);

@@ -14,7 +14,7 @@ pub use ident_missing_features::IdentMissingFeatures;
 pub use keepalive::{Keepalive, KeepaliveAck};
 pub use server_ident::ServerIdent;
 
-use crate::Encode;
+use crate::{Decode, Encode};
 
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
@@ -55,5 +55,11 @@ impl MsgrFeatures {
 impl Encode for MsgrFeatures {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.0.encode(buffer);
+    }
+}
+
+impl Decode<'_> for MsgrFeatures {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, crate::DecodeError> {
+        Ok(Self(u64::decode(buffer)?))
     }
 }
