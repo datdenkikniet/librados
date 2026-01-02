@@ -1,4 +1,4 @@
-use crate::{Encode, EntityType};
+use crate::EntityType;
 
 #[derive(Debug, Clone)]
 pub struct EntityName {
@@ -6,9 +6,4 @@ pub struct EntityName {
     pub name: String,
 }
 
-impl Encode for EntityName {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        (u8::from(self.ty) as u32).encode(buffer);
-        self.name.as_bytes().encode(buffer);
-    }
-}
+write_encdec!(EntityName = ty as u32 | name as crate::WireString);

@@ -150,7 +150,7 @@ fn main() {
 
     println!("Auth rx: {rx_auth:?}");
 
-    let (auth_done, _) = CephXMessage::decode(&rx_auth.auth_payload).unwrap();
+    let auth_done = CephXMessage::decode(&mut rx_auth.auth_payload.as_slice()).unwrap();
     let tickets = auth_done.payload();
 
     match auth_done.ty() {

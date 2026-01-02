@@ -10,7 +10,7 @@ mod key;
 pub mod messages;
 
 pub use ceph_features::CephFeatureSet;
-pub use encdec::{Decode, DecodeError, Encode};
+pub use encdec::{Decode, DecodeError, Encode, WireString};
 pub use entity_address::{EntityAddress, EntityAddressType};
 pub use entity_name::EntityName;
 pub use entity_type::EntityType;
