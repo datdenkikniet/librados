@@ -19,6 +19,14 @@ pub struct CephXServiceTicket {
 
 write_decode_encode!(CephXServiceTicket = const version 1 as u8 | session_key | validity);
 
+#[derive(Debug)]
+pub struct CephXServiceTicketInfo {
+    pub auth_ticket: AuthTicket,
+    pub session_key: CryptoKey,
+}
+
+write_decode_encode!(CephXServiceTicketInfo = const version 1 as u8 | auth_ticket | session_key);
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u16)]
 pub enum CephXMessageType {
@@ -198,27 +206,54 @@ write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | con
 #[derive(Debug)]
 pub struct AuthServiceTicketInfos {
     pub info_list: Vec<AuthServiceTicketInfo>,
-    pub cbl: Vec<u8>,
+    /// Is also: `cbl`
+    ///
+    /// In the end, this is a Vec<u8> (with length indicator),
+    /// where the contained data makes up an encrypted Vec<u8>
+    /// (with length indicator and auth info). So, to decode it,
+    /// you must first decode it as a `[u8]`, and then [`decode_decrypt_enc_bl`][0]
+    /// that value.
+    ///
+    /// [0]: crate::crypto::decode_decrypt_enc_bl
+    pub connection_secret: Vec<u8>,
     pub extra: Vec<u8>,
 }
 
-write_decode_encode!(AuthServiceTicketInfos = const version 1 as u8 | info_list | cbl | extra);
+write_decode_encode!(AuthServiceTicketInfos = const version 1 as u8 | info_list | connection_secret | extra);
 
 #[derive(Debug)]
 pub struct AuthServiceTicketInfo {
     pub service_id: EntityType,
-    pub encrypted_service_ticket: Vec<u8>,
-    pub maybe_encrypted_blob: MaybeEncryptedCephXTicketBlob,
+    pub encrypted_session_ticket: Vec<u8>,
+    pub refresh_ticket: MaybeEncryptedCephXTicketBlob,
 }
 
 write_decode_encode!(
-    AuthServiceTicketInfo = service_id as u32 | const version 1 as u8 | encrypted_service_ticket | maybe_encrypted_blob
+    AuthServiceTicketInfo = service_id as u32 | const version 1 as u8 | encrypted_session_ticket | refresh_ticket
 );
 
 #[derive(Debug)]
 pub enum MaybeEncryptedCephXTicketBlob {
     Unencrypted(CephXTicketBlob),
     Encrypted(Vec<u8>),
+}
+
+impl MaybeEncryptedCephXTicketBlob {
+    pub fn as_unencrypted(&self) -> Option<&CephXTicketBlob> {
+        if let Self::Unencrypted(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_unencrypted_mut(&mut self) -> Option<&mut CephXTicketBlob> {
+        if let Self::Unencrypted(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl Decode<'_> for MaybeEncryptedCephXTicketBlob {

@@ -73,7 +73,7 @@ impl CryptoKey {
         data.truncate(res_len);
     }
 
-    pub fn decrypt<'a>(&self, data: &'a mut [u8]) -> &'a [u8] {
+    pub fn decrypt<'a>(&self, data: &'a mut [u8]) -> Option<&'a [u8]> {
         // TODO: this is so bad...
         let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
         let secret = secret.into();
@@ -82,7 +82,7 @@ impl CryptoKey {
         let iv = (*CEPH_AES_IV).into();
         let aes = cbc::Decryptor::<aes::Aes128>::new(&secret, &iv);
 
-        aes.decrypt_padded_mut::<Pkcs7>(data).unwrap()
+        aes.decrypt_padded_mut::<Pkcs7>(data).ok()
     }
 }
 

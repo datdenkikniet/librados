@@ -24,5 +24,5 @@ fn valid_frame() {
     let (preamble, frame_data) = frame_data.split_at(Preamble::SERIALIZED_SIZE);
     let preamble = Preamble::parse(preamble, rev).unwrap();
 
-    Frame::parse(&preamble, frame_data).expect("Valid frame should be parseable");
+    Frame::decode(&preamble, frame_data).expect("Valid frame should be parseable");
 }
