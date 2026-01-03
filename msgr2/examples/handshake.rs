@@ -15,8 +15,8 @@ use ceph_protocol::{
             ConMode,
         },
         cephx::{
-            AuthServiceTicketInfo, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
-            CephXMessageType, CephXTicketBlob,
+            AuthServiceTicketInfos, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
+            CephXMessageType, CephXServiceTicket, CephXTicketBlob,
         },
     },
 };
@@ -58,7 +58,7 @@ where
 }
 
 fn main() {
-    let master_key = CryptoKey::decode(include_bytes!("./key.bin")).unwrap();
+    let master_key = CryptoKey::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
     let config = Config::new(true);
@@ -151,11 +151,30 @@ fn main() {
     println!("Auth rx: {rx_auth:?}");
 
     let auth_done = CephXMessage::decode(&mut rx_auth.auth_payload.as_slice()).unwrap();
-    let tickets = auth_done.payload();
+
+    if auth_done.ty() != CephXMessageType::GetAuthSessionKey {
+        panic!(
+            "Expected CephXMessage of type GetAuthSessionKey, got {:?}",
+            auth_done.ty()
+        );
+    }
+
+    let mut tickets = auth_done.payload();
 
     match auth_done.ty() {
         CephXMessageType::GetAuthSessionKey => {
-            let cbl = AuthServiceTicketInfo::parse(&tickets);
+            let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets).unwrap();
+
+            let mut encode_encrypt_service_ticket =
+                &mut service_ticket_infos.info_list[0].encrypted_service_ticket;
+
+            let key: CephXServiceTicket = ceph_protocol::crypto::decode_decrypt_enc_bl(
+                &mut encode_encrypt_service_ticket,
+                &master_key,
+            )
+            .unwrap();
+
+            println!("Session key: {key:?}");
 
             // We are encrypted here: let's deal with that
 

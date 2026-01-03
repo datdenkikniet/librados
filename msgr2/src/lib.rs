@@ -1,6 +1,6 @@
 mod ceph_features;
 pub mod connection;
-mod crypto;
+pub mod crypto;
 mod encdec;
 mod entity_address;
 mod entity_name;
