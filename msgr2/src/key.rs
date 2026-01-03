@@ -2,7 +2,7 @@ use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pk
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
 
-use crate::{Decode, Encode, Timestamp};
+use crate::{Decode, DecodeError, Encode, Timestamp};
 
 pub struct CryptoKey {
     ty: u16,
@@ -20,8 +20,8 @@ impl core::fmt::Debug for CryptoKey {
     }
 }
 
-impl CryptoKey {
-    pub fn encode_hazmat(&self, buffer: &mut Vec<u8>) {
+impl Encode for CryptoKey {
+    fn encode(&self, buffer: &mut Vec<u8>) {
         self.ty.encode(buffer);
         self.created.encode(buffer);
 
@@ -29,7 +29,34 @@ impl CryptoKey {
         len.encode(buffer);
         buffer.extend_from_slice(&self.secret);
     }
+}
 
+impl Decode<'_> for CryptoKey {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        let ty = u16::decode(buffer)?;
+        let created = Timestamp::decode(buffer)?;
+
+        let len = u16::decode(buffer)?;
+
+        let Some((secret, left)) = buffer.split_at_checked(len as usize) else {
+            return Err(DecodeError::NotEnoughData {
+                field: Some("secret"),
+                have: buffer.len(),
+                need: len as usize,
+            });
+        };
+
+        *buffer = left;
+
+        Ok(Self {
+            ty,
+            created,
+            secret: secret.to_vec(),
+        })
+    }
+}
+
+impl CryptoKey {
     pub fn encrypt(&self, data: &mut Vec<u8>) {
         // TODO: this is so bad...
         let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
@@ -57,41 +84,13 @@ impl CryptoKey {
 
         aes.decrypt_padded_mut::<Pkcs7>(data).unwrap()
     }
-
-    pub fn decode(data: &[u8]) -> Result<Self, String> {
-        let Some((ty, mut data)) = data.split_first_chunk::<2>() else {
-            return Err(format!("Expected 2 bytes for key type."));
-        };
-
-        let ty = u16::from_le_bytes(*ty);
-        let created = Timestamp::decode(&mut data).unwrap();
-
-        let Some((len, data)) = data.split_first_chunk::<2>() else {
-            return Err(format!("Expected 2 bytes for key len."));
-        };
-        let len = u16::from_le_bytes(*len);
-
-        if data.len() != len as usize {
-            return Err(format!(
-                "Expected {} bytes of key data, only got {}",
-                len,
-                data.len()
-            ));
-        }
-
-        Ok(Self {
-            ty,
-            created,
-            secret: data.to_vec(),
-        })
-    }
 }
 
 #[test]
 fn decode_key() {
     let key_data = include_bytes!("./test.key");
 
-    let key = CryptoKey::decode(key_data);
+    let key = CryptoKey::decode(&mut &key_data[..]);
 
     panic!("{key:?}");
 }

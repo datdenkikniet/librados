@@ -1,4 +1,4 @@
-use crate::{CryptoKey, Encode};
+use crate::{CryptoKey, Decode, DecodeError, Encode};
 
 pub const AUTH_MAGIC: u64 = 0xff009cad8826aa55;
 
@@ -13,6 +13,43 @@ pub fn encode_encrypt_enc_bl<T: Encode>(t: &T, key: &CryptoKey) -> Vec<u8> {
     key.encrypt(&mut buffer);
 
     buffer
+}
+
+pub fn decode_decrypt_enc_bl<'a, T>(buf: &'a mut [u8], key: &CryptoKey) -> Result<T, DecodeError>
+where
+    T: Decode<'a> + 'a,
+{
+    let mut decrypted = key.decrypt(buf);
+
+    let buf = &mut decrypted;
+
+    let Some((v, left)) = buf.split_first() else {
+        return Err(DecodeError::NotEnoughData {
+            have: 0,
+            need: 1,
+            field: Some("encode_version"),
+        });
+    };
+
+    if *v != 1 {
+        return Err(DecodeError::UnexpectedVersion {
+            ty: "encrypted",
+            got: *v,
+            expected: 1..=1,
+        });
+    }
+
+    *buf = left;
+
+    let magic = u64::decode(buf)?;
+
+    if magic != AUTH_MAGIC {
+        return Err(DecodeError::Custom(
+            "Bad auth magic in decode_decrypt_enc_bl".to_string(),
+        ));
+    }
+
+    T::decode(buf)
 }
 
 pub fn encode_encrypt<T: Encode>(t: &T, key: &CryptoKey) -> Vec<u8> {

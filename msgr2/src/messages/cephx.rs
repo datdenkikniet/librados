@@ -1,14 +1,23 @@
 use crate::{
-    CryptoKey, Decode, DecodeError, Encode, EntityName, Timestamp, crypto::encode_encrypt,
+    CryptoKey, Decode, DecodeError, Encode, EntityName, EntityType, Timestamp,
+    crypto::encode_encrypt,
 };
-
-write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
 #[derive(Debug)]
 pub struct CephXTicketBlob {
     pub secret_id: u64,
     pub blob: Vec<u8>,
 }
+
+write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
+
+#[derive(Debug)]
+pub struct CephXServiceTicket {
+    pub session_key: CryptoKey,
+    pub validity: Timestamp,
+}
+
+write_decode_encode!(CephXServiceTicket = const version 1 as u8 | session_key | validity);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u16)]
@@ -187,46 +196,59 @@ pub struct AuthTicket {
 write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | const 0xFFFF_FFFF_FFFF_FFFFu64 as u64 | created | expires | caps | flags);
 
 #[derive(Debug)]
-pub struct AuthServiceTicketInfo {}
+pub struct AuthServiceTicketInfos {
+    pub info_list: Vec<AuthServiceTicketInfo>,
+    pub cbl: Vec<u8>,
+    pub extra: Vec<u8>,
+}
 
-impl AuthServiceTicketInfo {
-    pub fn parse(data: &[u8]) -> Self {
-        // Version
-        assert_eq!(data[0], 1);
+write_decode_encode!(AuthServiceTicketInfos = const version 1 as u8 | info_list | cbl | extra);
 
-        let num = u32::from_le_bytes(data[1..5].try_into().unwrap());
+#[derive(Debug)]
+pub struct AuthServiceTicketInfo {
+    pub service_id: EntityType,
+    pub encrypted_service_ticket: Vec<u8>,
+    pub maybe_encrypted_blob: MaybeEncryptedCephXTicketBlob,
+}
 
-        let mut left = &data[5..];
-        for _ in 0..num {
-            // Service ID
-            let _service_id = u32::from_le_bytes(left[0..4].try_into().unwrap());
+write_decode_encode!(
+    AuthServiceTicketInfo = service_id as u32 | const version 1 as u8 | encrypted_service_ticket | maybe_encrypted_blob
+);
 
-            // Version
-            assert_eq!(left[4], 1);
+#[derive(Debug)]
+pub enum MaybeEncryptedCephXTicketBlob {
+    Unencrypted(CephXTicketBlob),
+    Encrypted(Vec<u8>),
+}
 
-            left = &left[5..];
+impl Decode<'_> for MaybeEncryptedCephXTicketBlob {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        let encrypted = bool::decode(buffer)?;
 
-            // Service ticket (encrypted with principal secret)
-            let len = u32::from_le_bytes(left[0..4].try_into().unwrap()) as usize;
-            left = &left[4 + len..];
+        let blob = Vec::decode(buffer)?;
 
-            // (Potentially encrypted) service ticket blob
-            let _has_encrypted_ticket = left[0] != 0;
-            let len = u32::from_le_bytes(left[1..5].try_into().unwrap()) as usize;
-            assert!(left.len() > len);
-            left = &left[5 + len..];
+        if encrypted {
+            Ok(Self::Encrypted(blob))
+        } else {
+            let unencrypted_blob = CephXTicketBlob::decode(&mut blob.as_slice())?;
+            Ok(Self::Unencrypted(unencrypted_blob))
         }
+    }
+}
 
-        // cbl
-        let len = u32::from_le_bytes(left[0..4].try_into().unwrap()) as usize;
-        let left = &left[4 + len..];
-
-        // extra
-        let len = u32::from_le_bytes(left[0..4].try_into().unwrap()) as usize;
-        let left = &left[4 + len..];
-
-        assert_eq!(left.len(), 0);
-
-        Self {}
+impl Encode for MaybeEncryptedCephXTicketBlob {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        match self {
+            MaybeEncryptedCephXTicketBlob::Unencrypted(ceph_xticket_blob) => {
+                false.encode(buffer);
+                let mut blob_vec = Vec::new();
+                ceph_xticket_blob.encode(&mut blob_vec);
+                blob_vec.encode(buffer);
+            }
+            MaybeEncryptedCephXTicketBlob::Encrypted(items) => {
+                true.encode(buffer);
+                items.encode(buffer);
+            }
+        }
     }
 }

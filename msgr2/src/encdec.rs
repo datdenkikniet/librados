@@ -9,7 +9,7 @@ macro_rules! write_decode_encode {
 
     (enc($self:ident, $buffer:ident): { }) => {};
 
-    (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+    (dec_version_check($struct:ident, $buffer:ident): { const version $val:literal as u8 }) => {
         let Some((v, left)) = $buffer.split_first() else {
             return Err($crate::DecodeError::NotEnoughData { have: 0, need: 1, field: Some("version") })
         };
@@ -19,6 +19,10 @@ macro_rules! write_decode_encode {
         }
 
         *$buffer = left;
+    };
+
+    (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
+        write_decode_encode!(dec_version_check($struct, $buffer): { const version $val as u8 });
         write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
     };
 
