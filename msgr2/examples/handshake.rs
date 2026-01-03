@@ -5,7 +5,7 @@ use std::{
 
 use ceph_protocol::{
     CephFeatureSet, CryptoKey, Decode, Encode, EntityAddress, EntityAddressType, EntityName,
-    EntityType, Timestamp,
+    EntityType, Timestamp, WireString,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
@@ -16,7 +16,7 @@ use ceph_protocol::{
         },
         cephx::{
             AuthServiceTicketInfos, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
-            CephXMessageType, CephXServiceTicket, CephXTicketBlob,
+            CephXMessageType, CephXServiceTicket, CephXServiceTicketInfo, CephXTicketBlob,
         },
     },
 };
@@ -52,16 +52,14 @@ where
     buffer.resize(preamble.data_and_epilogue_len(), 0);
     r.read(&mut buffer).unwrap();
 
-    let frame = Frame::parse(&preamble, &buffer).unwrap();
-
-    connection.recv(frame).unwrap()
+    connection.recv(&preamble, &buffer).unwrap()
 }
 
 fn main() {
     let master_key = CryptoKey::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
-    let config = Config::new(true);
+    let config = Config::new(false);
     let connection = ceph_protocol::connection::Connection::new(config);
 
     let mut banner = connection.banner().to_bytes();
@@ -133,7 +131,7 @@ fn main() {
             secret_id: 0,
             blob: Vec::new(),
         },
-        other_keys: u8::from(EntityType::Mon) as u32,
+        other_keys: u8::from(EntityType::Mon) as u32 | u8::from(EntityType::Osd) as u32,
     };
 
     let auth_req_more = AuthRequestMore {
@@ -164,17 +162,34 @@ fn main() {
     match auth_done.ty() {
         CephXMessageType::GetAuthSessionKey => {
             let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets).unwrap();
+            assert!(tickets.is_empty());
 
-            let mut encode_encrypt_service_ticket =
-                &mut service_ticket_infos.info_list[0].encrypted_service_ticket;
+            for info in &mut service_ticket_infos.info_list {
+                println!("Ticket entity: {:?}", info.service_id);
+                println!("Additional ticket data: {:?}", info.refresh_ticket);
 
-            let key: CephXServiceTicket = ceph_protocol::crypto::decode_decrypt_enc_bl(
-                &mut encode_encrypt_service_ticket,
-                &master_key,
-            )
-            .unwrap();
+                let _service_session_ticket: CephXServiceTicket =
+                    ceph_protocol::crypto::decode_decrypt_enc_bl(
+                        &mut info.encrypted_session_ticket,
+                        &master_key,
+                    )
+                    .unwrap();
 
-            println!("Session key: {key:?}");
+                let _service_refresh_ticket = info.refresh_ticket.as_unencrypted_mut().unwrap();
+
+                let encrypted = service_ticket_infos.connection_secret.clone();
+                let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice()).unwrap().to_vec();
+                let connection_secret: &[u8] = ceph_protocol::crypto::decode_decrypt_enc_bl(
+                    &mut encrypted,
+                    &_service_session_ticket.session_key,
+                )
+                .unwrap();
+
+                println!("Connection secret len: {}", connection_secret.len());
+            }
+
+            println!("CBL len: {}", service_ticket_infos.connection_secret.len());
+            println!("Extra len: {}", service_ticket_infos.extra.len());
 
             // We are encrypted here: let's deal with that
 

@@ -1,10 +1,14 @@
+mod encryption;
 pub mod states;
 
 use states::{Active, Established, ExchangeHello, Inactive};
 
 use crate::{
     Decode, DecodeError, Encode,
-    connection::states::{Authenticating, Identifying},
+    connection::{
+        encryption::Encryption,
+        states::{Authenticating, Identifying},
+    },
     frame::{Frame, Msgr2Revision, Preamble, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
@@ -68,7 +72,10 @@ impl Connection<Inactive> {
         };
 
         Ok(Connection {
-            state: ExchangeHello { revision },
+            state: ExchangeHello {
+                revision,
+                encryption: Encryption::new(),
+            },
             buffer: Vec::new(),
             config: self.config,
         })
@@ -89,6 +96,7 @@ impl Connection<ExchangeHello> {
             buffer: self.buffer,
             state: Authenticating {
                 revision: self.state.revision,
+                encryption: self.state.encryption,
             },
         }
     }
@@ -136,6 +144,7 @@ impl Connection<Authenticating> {
         Ok(Connection {
             state: Identifying {
                 revision: self.state.revision,
+                encryption: self.state.encryption,
             },
             config: self.config,
             buffer: self.buffer,
@@ -158,6 +167,7 @@ impl Connection<Identifying> {
         Ok(Connection {
             state: Active {
                 revision: self.state.revision,
+                encryption: self.state.encryption,
             },
             config: self.config,
             buffer: self.buffer,
@@ -204,7 +214,9 @@ where
         Ok(preamble)
     }
 
-    pub fn recv(&mut self, frame: Frame) -> Result<Message, DecodeError> {
+    pub fn recv(&mut self, preamble: &Preamble, frame_data: &[u8]) -> Result<Message, DecodeError> {
+        let frame = Frame::decode(preamble, frame_data)?;
+
         assert!(
             frame.segments().len() == 1,
             "Multi-segment frames not supported yet."

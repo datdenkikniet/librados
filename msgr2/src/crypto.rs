@@ -19,7 +19,9 @@ pub fn decode_decrypt_enc_bl<'a, T>(buf: &'a mut [u8], key: &CryptoKey) -> Resul
 where
     T: Decode<'a> + 'a,
 {
-    let mut decrypted = key.decrypt(buf);
+    let mut decrypted = key
+        .decrypt(buf)
+        .ok_or_else(|| DecodeError::Custom(format!("Decryption failed.")))?;
 
     let buf = &mut decrypted;
 

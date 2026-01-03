@@ -1,9 +1,12 @@
 use std::num::NonZeroU8;
 
-use crate::frame::{
-    Msgr2Revision,
-    epilogue::Epilogue,
-    preamble::{Preamble, SegmentDetail, Tag},
+use crate::{
+    DecodeError,
+    frame::{
+        Msgr2Revision,
+        epilogue::Epilogue,
+        preamble::{Preamble, SegmentDetail, Tag},
+    },
 };
 
 const ALGO: crc::Algorithm<u32> = crc::Algorithm {
@@ -117,7 +120,7 @@ impl<'a> Frame<'a> {
         Ok(used)
     }
 
-    pub fn parse(preamble: &Preamble, data: &'a [u8]) -> Result<Self, String> {
+    pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
         let mut trailer = data;
 
         let mut segments = [EMPTY; 4];
@@ -126,23 +129,26 @@ impl<'a> Frame<'a> {
         for (idx, segment) in preamble.segments().iter().enumerate() {
             let len = segment.len();
 
-            let (segment, left) = trailer.split_at_checked(len).ok_or_else(|| {
-                format!(
-                    "Expected {} bytes of segment data, but only had {} left",
-                    len,
-                    trailer.len()
-                )
-            })?;
+            let (segment, left) =
+                trailer
+                    .split_at_checked(len)
+                    .ok_or_else(|| DecodeError::NotEnoughData {
+                        field: Some("segment"),
+                        have: trailer.len(),
+                        need: len,
+                    })?;
             trailer = left;
             segments[idx] = segment;
 
             if idx == 0 && preamble.revision == Msgr2Revision::V2_1 {
-                let (crc, left) = trailer.split_first_chunk::<4>().ok_or_else(|| {
-                    format!(
-                        "Expected 4 bytes of CRC data, but only had {} left",
-                        trailer.len()
-                    )
-                })?;
+                let (crc, left) =
+                    trailer
+                        .split_first_chunk::<4>()
+                        .ok_or_else(|| DecodeError::NotEnoughData {
+                            field: Some("crc"),
+                            have: trailer.len(),
+                            need: len,
+                        })?;
 
                 crc_segment1 = u32::from_le_bytes(*crc);
                 trailer = left;
@@ -153,14 +159,14 @@ impl<'a> Frame<'a> {
 
         let completed = match preamble.revision {
             Msgr2Revision::V2_0 => {
-                let epilogue = Epilogue::parse(trailer, &mut crcs)?;
+                let epilogue = Epilogue::decode(trailer, &mut crcs)?;
                 epilogue.is_completed(preamble.revision)
             }
             Msgr2Revision::V2_1 => {
                 crcs[0] = crc_segment1;
 
                 if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
-                    let epilogue = Epilogue::parse(trailer, &mut crcs[1..])?;
+                    let epilogue = Epilogue::decode(trailer, &mut crcs[1..])?;
                     epilogue.is_completed(preamble.revision)
                 } else {
                     true
@@ -169,7 +175,9 @@ impl<'a> Frame<'a> {
         };
 
         if !completed {
-            return Err("Epilogue status did not indicate correct completion".into());
+            return Err(DecodeError::Custom(
+                "Epilogue status did not indicate correct completion".to_string(),
+            ));
         }
 
         for (idx, crc) in crcs.iter().copied().enumerate() {
@@ -177,19 +185,19 @@ impl<'a> Frame<'a> {
                 let segment = segments[idx];
                 let calculated_crc = CRC.checksum(segment);
                 if crc != calculated_crc {
-                    return Err(format!(
+                    return Err(DecodeError::Custom(format!(
                         "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
                         crc,
                         calculated_crc,
                         idx + 1
-                    ));
+                    )));
                 }
             } else if crc != 0 {
-                return Err(format!(
+                return Err(DecodeError::Custom(format!(
                     "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
                     crc,
                     idx + 1
-                ));
+                )));
             }
         }
 

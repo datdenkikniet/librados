@@ -1,4 +1,4 @@
-use crate::frame::Msgr2Revision;
+use crate::{DecodeError, frame::Msgr2Revision};
 
 #[derive(Debug, Clone)]
 pub struct Epilogue<'a> {
@@ -19,13 +19,14 @@ impl<'a> Epilogue<'a> {
         Ok(1 + 4 * 4)
     }
 
-    pub fn parse(data: &[u8], crcs: &'a mut [u32]) -> Result<Self, String> {
+    pub fn decode(data: &[u8], crcs: &'a mut [u32]) -> Result<Self, DecodeError> {
         let expected = 1 + (4 * crcs.len());
         if data.len() != expected {
-            return Err(format!(
-                "Expected {expected} bytes of epilogue data, got {}",
-                data.len()
-            ));
+            return Err(DecodeError::NotEnoughData {
+                field: Some("epilogue"),
+                have: data.len(),
+                need: expected,
+            });
         }
 
         let late_flags = data[0];
