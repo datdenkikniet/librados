@@ -6,7 +6,7 @@ use std::{
 use ceph_protocol::{
     CephFeatureSet, CryptoKey, Decode, Encode, EntityAddress, EntityAddressType, EntityName,
     EntityType, Timestamp,
-    connection::{Config, Connection, Message, states::Established},
+    connection::{Config, Connection, Message, state::Established},
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
@@ -27,7 +27,7 @@ fn send(frame: Frame<'_>, w: &mut impl std::io::Write) {
     println!(
         "Sending: {:?}, {}, {}",
         frame,
-        frame.segments()[0].len(),
+        frame.segments().next().unwrap().len(),
         to_send.len()
     );
 
@@ -48,11 +48,14 @@ where
         panic!("{:?}", &buffer[..len]);
     }
 
-    let preamble = connection.recv_preamble(&buffer).unwrap();
+    let mut preamble = connection.recv_preamble(&buffer).unwrap();
     buffer.resize(preamble.data_and_epilogue_len(), 0);
-    r.read(&mut buffer).unwrap();
 
-    connection.recv(&preamble, &buffer).unwrap()
+    if !buffer.is_empty() {
+        r.read(&mut buffer).unwrap();
+    }
+
+    connection.recv(&mut preamble, &buffer).unwrap()
 }
 
 fn main() {
@@ -220,16 +223,17 @@ fn main() {
 
     connection.set_session_key(session_key, rx_nonce);
 
-    // panic!("{cbl:?}");
+    // let signature = connection.recv_done(&rx_auth);
+    // send(signature, &mut stream);
 
-    let signature = connection.recv_done(&rx_auth);
-    send(signature, &mut stream);
+    println!("Recv signature");
 
     let Message::AuthSignature(rx_sig) = recv(&mut connection, &mut stream) else {
         panic!("Expected AuthSignature, got something else");
     };
 
     println!("Signature rx: {rx_sig:?}");
+
     let mut connection = connection.recv_signature(&rx_sig).unwrap();
 
     let target = EntityAddress {

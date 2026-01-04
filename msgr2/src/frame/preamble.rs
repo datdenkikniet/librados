@@ -1,6 +1,9 @@
 use std::num::NonZeroU8;
 
-use crate::frame::{Msgr2Revision, epilogue::Epilogue};
+use crate::{
+    frame::{FrameFormat, epilogue::Epilogue},
+    key::AES_GCM_SIG_SIZE,
+};
 
 /// The algorithm parameters used for the CRC
 /// calculated by Ceph.
@@ -83,7 +86,7 @@ impl TryFrom<u8> for Tag {
 
 #[derive(Debug)]
 pub struct Preamble {
-    pub(crate) revision: Msgr2Revision,
+    pub(crate) revision: FrameFormat,
     pub(crate) tag: Tag,
     pub(crate) segment_count: NonZeroU8,
     pub(crate) segment_details: [SegmentDetail; 4],
@@ -98,17 +101,33 @@ impl Preamble {
     pub fn data_and_epilogue_len(&self) -> usize {
         let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
 
-        let epilogue_len = match self.revision {
-            Msgr2Revision::V2_0 => Epilogue::SERIALIZED_SIZE_V2_0,
-            Msgr2Revision::V2_1 => {
+        match self.revision {
+            FrameFormat::Rev0Crc => segment_data + Epilogue::SERIALIZED_SIZE_V2_0,
+            FrameFormat::Rev1Crc => {
                 let first_segment_crc = if self.segments()[0].len() > 0 { 4 } else { 0 };
                 let epilogue = if self.segments().len() > 1 { 13 } else { 0 };
 
-                first_segment_crc + epilogue
+                segment_data + first_segment_crc + epilogue
             }
-        };
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                let first_segment_data_len = {
+                    let first_segment_len = self.segments()[0].len();
+                    first_segment_len - (48.min(first_segment_len))
+                };
 
-        segment_data + epilogue_len
+                let other_segments_data_len: usize =
+                    self.segments().iter().skip(1).map(|v| v.len()).sum();
+
+                let data_len = first_segment_data_len + other_segments_data_len;
+
+                if data_len > 0 {
+                    data_len + AES_GCM_SIG_SIZE
+                } else {
+                    0
+                }
+            }
+        }
     }
 
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
@@ -152,8 +171,8 @@ impl Preamble {
 
     pub fn parse(
         input: &[u8; Self::SERIALIZED_SIZE],
-        revision: Msgr2Revision,
-        inline_data: Vec<u8>,
+        revision: FrameFormat,
+        mut inline_data: Vec<u8>,
     ) -> Result<Self, String> {
         let (tag_scount, buffer) = input.split_at(2);
 
@@ -192,6 +211,8 @@ impl Preamble {
             ));
         }
 
+        inline_data.truncate(segment_details[0].len());
+
         Ok(Self {
             revision,
             tag,
@@ -205,6 +226,13 @@ impl Preamble {
 
     pub(crate) fn segments(&self) -> &[SegmentDetail] {
         &self.segment_details[..self.segment_count.get() as usize]
+    }
+
+    pub fn inline_data(&mut self) -> Option<Vec<u8>> {
+        match self.revision {
+            FrameFormat::Rev1Secure => Some(std::mem::take(&mut self.inline_data)),
+            _ => None,
+        }
     }
 }
 

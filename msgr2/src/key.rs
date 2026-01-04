@@ -1,9 +1,8 @@
-use aes::cipher::{
-    BlockDecryptMut, BlockEncryptMut, KeyIvInit, StreamCipher, block_padding::Pkcs7,
-};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 use aes_gcm::{Aes128Gcm, KeyInit, aead::AeadMutInPlace};
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
+pub const AES_GCM_SIG_SIZE: usize = 16;
 
 use crate::{Decode, DecodeError, Encode, Timestamp};
 

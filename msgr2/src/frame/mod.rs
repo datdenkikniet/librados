@@ -6,9 +6,22 @@ pub use frame::Frame;
 pub use preamble::{Preamble, Tag};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Msgr2Revision {
-    V2_0,
-    V2_1,
+pub enum FrameFormat {
+    Rev0Crc,
+    Rev1Crc,
+    Rev0Secure,
+    Rev1Secure,
+}
+
+impl FrameFormat {
+    pub fn has_crc(&self) -> bool {
+        match self {
+            FrameFormat::Rev0Crc => true,
+            FrameFormat::Rev1Crc => true,
+            FrameFormat::Rev0Secure => false,
+            FrameFormat::Rev1Secure => false,
+        }
+    }
 }
 
 #[test]
@@ -20,11 +33,11 @@ fn valid_frame() {
         00, 00, 105, 92, 102, 236, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
     ];
 
-    let rev = Msgr2Revision::V2_0;
+    let rev = FrameFormat::Rev0Crc;
     let (preamble, frame_data) = frame_data
         .split_first_chunk::<{ Preamble::SERIALIZED_SIZE }>()
         .unwrap();
-    let preamble = Preamble::parse(preamble, rev, Vec::new()).unwrap();
+    let mut preamble = Preamble::parse(preamble, rev, Vec::new()).unwrap();
 
-    Frame::decode(&preamble, frame_data).expect("Valid frame should be parseable");
+    Frame::decode(&mut preamble, frame_data).expect("Valid frame should be parseable");
 }

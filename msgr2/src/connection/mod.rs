@@ -1,15 +1,15 @@
 mod encryption;
-pub mod states;
+pub mod state;
 
-use states::{Active, Established, ExchangeHello, Inactive};
+use state::{Active, Established, ExchangeHello, Inactive};
 
 use crate::{
     CryptoKey, Decode, DecodeError, Encode,
     connection::{
         encryption::Encryption,
-        states::{Authenticating, Identifying},
+        state::{Authenticating, Identifying, Revision},
     },
-    frame::{Frame, Msgr2Revision, Preamble, Tag},
+    frame::{Frame, Preamble, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -66,9 +66,9 @@ impl Connection<Inactive> {
         }
 
         let revision = if self.config.support_rev21 && banner.supported().revision_21() {
-            Msgr2Revision::V2_1
+            Revision::Rev1
         } else {
-            Msgr2Revision::V2_0
+            Revision::Rev0
         };
 
         Ok(Connection {
@@ -87,7 +87,7 @@ impl Connection<ExchangeHello> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
 
-        Frame::new(Tag::Hello, &[&self.buffer], self.state.revision).unwrap()
+        Frame::new(Tag::Hello, &[&self.buffer], self.state.format()).unwrap()
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
@@ -107,14 +107,14 @@ impl Connection<Authenticating> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.revision).unwrap()
+        Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.format()).unwrap()
     }
 
     pub fn send_more(&mut self, request: &AuthRequestMore) -> Frame<'_> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.revision).unwrap()
+        Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.format()).unwrap()
     }
 
     #[expect(unused)]
@@ -130,7 +130,7 @@ impl Connection<Authenticating> {
 
         signature.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthSignature, &[&self.buffer], self.state.revision).unwrap()
+        Frame::new(Tag::AuthSignature, &[&self.buffer], self.state.format()).unwrap()
     }
 
     pub fn recv_signature(
@@ -157,7 +157,7 @@ impl Connection<Identifying> {
         self.buffer.clear();
         ident.encode(&mut self.buffer);
 
-        Frame::new(Tag::ClientIdent, &[&self.buffer], self.state.revision).unwrap()
+        Frame::new(Tag::ClientIdent, &[&self.buffer], self.state.format()).unwrap()
     }
 
     #[expect(unused)]
@@ -187,7 +187,7 @@ impl Connection<Active> {
         self.buffer.clear();
         message.write_to(&mut self.buffer);
 
-        Frame::new(message.tag(), &[&self.buffer], self.state.revision()).unwrap()
+        Frame::new(message.tag(), &[&self.buffer], self.state.format()).unwrap()
     }
 }
 
@@ -227,20 +227,27 @@ where
             .split_first_chunk()
             .expect("self.preamble_len() >= 32");
 
-        let preamble = Preamble::parse(preamble, self.state.revision(), inline_data.to_vec())?;
+        let preamble = Preamble::parse(preamble, self.state.format(), inline_data.to_vec())?;
 
         Ok(preamble)
     }
 
-    pub fn recv(&mut self, preamble: &Preamble, frame_data: &[u8]) -> Result<Message, DecodeError> {
+    pub fn recv(
+        &mut self,
+        preamble: &mut Preamble,
+        frame_data: &[u8],
+    ) -> Result<Message, DecodeError> {
         let frame = Frame::decode(preamble, frame_data)?;
 
         assert!(
-            frame.segments().len() == 1,
+            frame.segments().count() == 1,
             "Multi-segment frames not supported yet."
         );
 
-        Ok(Message::decode(frame.tag(), frame.segments()[0])?)
+        Ok(Message::decode(
+            frame.tag(),
+            frame.segments().next().unwrap(),
+        )?)
     }
 }
 
