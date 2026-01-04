@@ -1,4 +1,4 @@
-use crate::{DecodeError, frame::Msgr2Revision};
+use crate::{DecodeError, frame::FrameFormat};
 
 #[derive(Debug, Clone)]
 pub struct Epilogue<'a> {
@@ -39,10 +39,12 @@ impl<'a> Epilogue<'a> {
         Ok(Self { late_flags, crcs })
     }
 
-    pub fn is_completed(&self, revision: Msgr2Revision) -> bool {
+    pub fn is_completed(&self, revision: FrameFormat) -> bool {
         match revision {
-            Msgr2Revision::V2_0 => self.late_flags & 0x1 == 0x0,
-            Msgr2Revision::V2_1 => self.late_flags & 0xF == 0xE,
+            FrameFormat::Rev0Crc => self.late_flags & 0x1 == 0x0,
+            FrameFormat::Rev1Crc => self.late_flags & 0xF == 0xE,
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => todo!(),
         }
     }
 }

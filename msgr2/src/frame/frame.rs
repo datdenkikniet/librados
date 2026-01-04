@@ -3,7 +3,7 @@ use std::num::NonZeroU8;
 use crate::{
     DecodeError,
     frame::{
-        Msgr2Revision,
+        FrameFormat,
         epilogue::Epilogue,
         preamble::{Preamble, SegmentDetail, Tag},
     },
@@ -22,26 +22,49 @@ const ALGO: crc::Algorithm<u32> = crc::Algorithm {
 
 const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
-const EMPTY: &'static [u8] = &[];
+#[derive(Debug, Clone)]
+enum VecOrSlice<'a> {
+    Vec(Vec<u8>),
+    Slice(&'a [u8]),
+}
+
+impl core::ops::Deref for VecOrSlice<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            VecOrSlice::Vec(items) => items.as_slice(),
+            VecOrSlice::Slice(items) => items,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Frame<'a> {
-    revision: Msgr2Revision,
+    revision: FrameFormat,
     tag: Tag,
     valid_segments: NonZeroU8,
-    segments: [&'a [u8]; 4],
+    segments: [VecOrSlice<'a>; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], revision: Msgr2Revision) -> Option<Self> {
+    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], revision: FrameFormat) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
         }
 
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
 
-        let mut segments_out = [EMPTY; 4];
-        segments_out[..segments.len()].copy_from_slice(segments);
+        let mut segments_out = [
+            VecOrSlice::Slice(&[]),
+            VecOrSlice::Slice(&[]),
+            VecOrSlice::Slice(&[]),
+            VecOrSlice::Slice(&[]),
+        ];
+
+        for (input, output) in segments.iter().zip(segments_out.iter_mut()) {
+            *output = VecOrSlice::Slice(input);
+        }
 
         Some(Self {
             revision,
@@ -58,10 +81,8 @@ impl<'a> Frame<'a> {
     }
 
     pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        let segments = self.segments();
-
         let mut segment_details = [SegmentDetail::default(); 4];
-        for (idx, segment) in segments.iter().enumerate() {
+        for (idx, segment) in self.segments().enumerate() {
             segment_details[idx] = SegmentDetail {
                 length: segment.len() as _,
                 alignment: 1,
@@ -81,20 +102,20 @@ impl<'a> Frame<'a> {
         let mut used = preamble.write(&mut output)?;
         let mut crcs = [0u32; 4];
 
-        for (idx, segment) in segments.iter().enumerate() {
+        for (idx, segment) in self.segments().enumerate() {
             let crc = CRC.checksum(segment);
             crcs[idx] = crc;
             output.write_all(segment)?;
             used += segment.len();
 
-            if self.revision == Msgr2Revision::V2_1 && idx == 0 && segment.len() > 0 {
+            if self.revision == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
                 output.write_all(&crc.to_le_bytes())?;
                 used += 4;
             }
         }
 
         used += match self.revision {
-            Msgr2Revision::V2_0 => {
+            FrameFormat::Rev0Crc => {
                 let epilogue = Epilogue {
                     late_flags: 0,
                     crcs: &crcs,
@@ -102,8 +123,8 @@ impl<'a> Frame<'a> {
 
                 epilogue.write(&mut output)?
             }
-            Msgr2Revision::V2_1 => {
-                let need_epilogue = segments.iter().skip(1).any(|v| v.len() > 0);
+            FrameFormat::Rev1Crc => {
+                let need_epilogue = self.segments().skip(1).any(|v| v.len() > 0);
 
                 if need_epilogue {
                     let epilogue = Epilogue {
@@ -116,32 +137,54 @@ impl<'a> Frame<'a> {
                     0
                 }
             }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => 0,
         };
 
         Ok(used)
     }
 
-    pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
+    pub fn decode(preamble: &'a mut Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
+        use VecOrSlice::Slice;
+
         let mut trailer = data;
 
-        let mut segments = [EMPTY; 4];
-        let mut crc_segment1 = 0xFFFF_FFFF;
+        let mut segments = [Slice(&[]), Slice(&[]), Slice(&[]), Slice(&[])];
+        let mut crc_segment1 = None;
 
-        for (idx, segment) in preamble.segments().iter().enumerate() {
-            let len = segment.len();
+        fn split_segment<'a>(
+            buf: &'a [u8],
+            len: usize,
+        ) -> Result<(&'a [u8], &'a [u8]), DecodeError> {
+            let err = || DecodeError::NotEnoughData {
+                field: Some("segment"),
+                have: buf.len(),
+                need: len,
+            };
 
-            let (segment, left) =
-                trailer
-                    .split_at_checked(len)
-                    .ok_or_else(|| DecodeError::NotEnoughData {
-                        field: Some("segment"),
-                        have: trailer.len(),
-                        need: len,
-                    })?;
+            buf.split_at_checked(len).ok_or_else(err)
+        }
+
+        let segment0 = preamble.segments()[0];
+        segments[0] = {
+            let inline_data = preamble.inline_data();
+            let len = if let Some(len) = inline_data.as_ref().map(|v| v.len()) {
+                segment0.len().saturating_sub(len)
+            } else {
+                segment0.len()
+            };
+
+            let (segment, left) = split_segment(trailer, len)?;
             trailer = left;
-            segments[idx] = segment;
 
-            if idx == 0 && preamble.revision == Msgr2Revision::V2_1 {
+            let out = if let Some(mut inline_data) = inline_data {
+                inline_data.extend_from_slice(segment);
+                VecOrSlice::Vec(inline_data)
+            } else {
+                VecOrSlice::Slice(segment)
+            };
+
+            if preamble.revision == FrameFormat::Rev1Crc {
                 let (crc, left) =
                     trailer
                         .split_first_chunk::<4>()
@@ -151,20 +194,29 @@ impl<'a> Frame<'a> {
                             need: len,
                         })?;
 
-                crc_segment1 = u32::from_le_bytes(*crc);
+                crc_segment1 = Some(u32::from_le_bytes(*crc));
                 trailer = left;
             }
+
+            out
+        };
+
+        for (idx, segment) in preamble.segments().iter().enumerate().skip(1) {
+            let (segment, left) = split_segment(trailer, segment.len())?;
+
+            trailer = left;
+            segments[idx] = VecOrSlice::Slice(segment);
         }
 
         let mut crcs = [0; 4];
 
         let completed = match preamble.revision {
-            Msgr2Revision::V2_0 => {
+            FrameFormat::Rev0Crc => {
                 let epilogue = Epilogue::decode(trailer, &mut crcs)?;
                 epilogue.is_completed(preamble.revision)
             }
-            Msgr2Revision::V2_1 => {
-                crcs[0] = crc_segment1;
+            FrameFormat::Rev1Crc => {
+                crcs[0] = crc_segment1.unwrap_or(0xFFFF_FFFF);
 
                 if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
                     let epilogue = Epilogue::decode(trailer, &mut crcs[1..])?;
@@ -173,6 +225,8 @@ impl<'a> Frame<'a> {
                     true
                 }
             }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => true,
         };
 
         if !completed {
@@ -181,24 +235,26 @@ impl<'a> Frame<'a> {
             ));
         }
 
-        for (idx, crc) in crcs.iter().copied().enumerate() {
-            if idx < preamble.segment_count.get() as usize {
-                let segment = segments[idx];
-                let calculated_crc = CRC.checksum(segment);
-                if crc != calculated_crc {
+        if preamble.revision.has_crc() {
+            for (idx, crc) in crcs.iter().copied().enumerate() {
+                if idx < preamble.segment_count.get() as usize {
+                    let segment = &segments[idx];
+                    let calculated_crc = CRC.checksum(&segment);
+                    if crc != calculated_crc {
+                        return Err(DecodeError::Custom(format!(
+                            "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
+                            crc,
+                            calculated_crc,
+                            idx + 1
+                        )));
+                    }
+                } else if crc != 0 {
                     return Err(DecodeError::Custom(format!(
-                        "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
+                        "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
                         crc,
-                        calculated_crc,
                         idx + 1
                     )));
                 }
-            } else if crc != 0 {
-                return Err(DecodeError::Custom(format!(
-                    "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
-                    crc,
-                    idx + 1
-                )));
             }
         }
 
@@ -214,7 +270,9 @@ impl<'a> Frame<'a> {
         self.tag
     }
 
-    pub fn segments(&self) -> &[&[u8]] {
-        &self.segments[..self.valid_segments.get() as usize]
+    pub fn segments(&self) -> impl Iterator<Item = &[u8]> {
+        self.segments[..self.valid_segments.get() as usize]
+            .iter()
+            .map(|v| v.as_ref())
     }
 }
