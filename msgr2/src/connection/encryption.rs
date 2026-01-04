@@ -12,13 +12,26 @@ impl Encryption {
         }
     }
 
-    pub fn set_secret_key(&mut self, key: CryptoKey) {
-        self.inner = EncryptionInner::CryptoKey(key)
+    pub fn is_secure(&self) -> bool {
+        matches!(self.inner, EncryptionInner::CryptoKey { .. })
+    }
+
+    pub fn set_secret_data(&mut self, key: CryptoKey, nonce: [u8; 12]) {
+        self.inner = EncryptionInner::CryptoKey { key, nonce }
+    }
+
+    pub fn decrypt(&self, buffer: &mut Vec<u8>) {
+        match &self.inner {
+            EncryptionInner::None => {}
+            EncryptionInner::CryptoKey { key, nonce } => {
+                key.decrypt_gcm(&nonce, buffer).unwrap();
+            }
+        }
     }
 }
 
 #[derive(Debug)]
 enum EncryptionInner {
     None,
-    CryptoKey(CryptoKey),
+    CryptoKey { key: CryptoKey, nonce: [u8; 12] },
 }

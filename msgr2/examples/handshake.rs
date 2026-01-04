@@ -5,7 +5,7 @@ use std::{
 
 use ceph_protocol::{
     CephFeatureSet, CryptoKey, Decode, Encode, EntityAddress, EntityAddressType, EntityName,
-    EntityType, Timestamp, WireString,
+    EntityType, Timestamp,
     connection::{Config, Connection, Message, states::Established},
     frame::Frame,
     messages::{
@@ -16,7 +16,7 @@ use ceph_protocol::{
         },
         cephx::{
             AuthServiceTicketInfos, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
-            CephXMessageType, CephXServiceTicket, CephXServiceTicketInfo, CephXTicketBlob,
+            CephXMessageType, CephXServiceTicket, CephXTicketBlob,
         },
     },
 };
@@ -59,7 +59,7 @@ fn main() {
     let master_key = CryptoKey::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
-    let config = Config::new(false);
+    let config = Config::new(true);
     let connection = ceph_protocol::connection::Connection::new(config);
 
     let mut banner = connection.banner().to_bytes();
@@ -159,44 +159,68 @@ fn main() {
 
     let mut tickets = auth_done.payload();
 
-    match auth_done.ty() {
-        CephXMessageType::GetAuthSessionKey => {
-            let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets).unwrap();
-            assert!(tickets.is_empty());
+    let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets).unwrap();
+    assert!(tickets.is_empty());
 
-            for info in &mut service_ticket_infos.info_list {
-                println!("Ticket entity: {:?}", info.service_id);
-                println!("Additional ticket data: {:?}", info.refresh_ticket);
+    let mut auth_service_ticket = None;
+    let mut auth_service_secret = None;
 
-                let _service_session_ticket: CephXServiceTicket =
-                    ceph_protocol::crypto::decode_decrypt_enc_bl(
-                        &mut info.encrypted_session_ticket,
-                        &master_key,
-                    )
-                    .unwrap();
+    for info in &mut service_ticket_infos.info_list {
+        println!("Ticket entity: {:?}", info.service_id);
+        println!("Additional ticket data: {:?}", info.refresh_ticket);
 
-                let _service_refresh_ticket = info.refresh_ticket.as_unencrypted_mut().unwrap();
+        let service_session_ticket: CephXServiceTicket =
+            ceph_protocol::crypto::decode_decrypt_enc_bl(
+                &mut info.encrypted_session_ticket,
+                &master_key,
+            )
+            .unwrap();
 
-                let encrypted = service_ticket_infos.connection_secret.clone();
-                let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice()).unwrap().to_vec();
-                let connection_secret: &[u8] = ceph_protocol::crypto::decode_decrypt_enc_bl(
-                    &mut encrypted,
-                    &_service_session_ticket.session_key,
-                )
-                .unwrap();
+        let _service_refresh_ticket = info.refresh_ticket.as_unencrypted_mut().unwrap();
 
-                println!("Connection secret len: {}", connection_secret.len());
-            }
+        let encrypted = service_ticket_infos.connection_secret.clone();
+        let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice()).unwrap().to_vec();
+        let connection_secret: &[u8] = ceph_protocol::crypto::decode_decrypt_enc_bl(
+            &mut encrypted,
+            &service_session_ticket.session_key,
+        )
+        .unwrap();
 
-            println!("CBL len: {}", service_ticket_infos.connection_secret.len());
-            println!("Extra len: {}", service_ticket_infos.extra.len());
-
-            // We are encrypted here: let's deal with that
-
-            // panic!("{cbl:?}");
+        if info.service_id == EntityType::Auth {
+            auth_service_ticket = Some(service_session_ticket);
+            auth_service_secret = Some(connection_secret.to_vec());
         }
-        _ => unreachable!(),
+
+        println!("Connection secret len: {}", connection_secret.len());
     }
+
+    println!("CBL len: {}", service_ticket_infos.connection_secret.len());
+    println!("Extra len: {}", service_ticket_infos.extra.len());
+
+    let Some(auth_service_ticket) = auth_service_ticket.take() else {
+        panic!("Did not get service ticket for auth service");
+    };
+
+    let Some(auth_service_secret) = auth_service_secret.take() else {
+        panic!("Did not get service secret for auth service");
+    };
+    // We are encrypted here: let's deal with that
+
+    let encryption_key = auth_service_secret[00..16].try_into().unwrap();
+    let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
+    let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
+
+    let session_key = CryptoKey::new(
+        Timestamp {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        encryption_key,
+    );
+
+    connection.set_session_key(session_key, rx_nonce);
+
+    // panic!("{cbl:?}");
 
     let signature = connection.recv_done(&rx_auth);
     send(signature, &mut stream);
