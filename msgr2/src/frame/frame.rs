@@ -75,6 +75,7 @@ impl<'a> Frame<'a> {
             segment_count: self.valid_segments,
             segment_details,
             _reserved: 0,
+            inline_data: Vec::new(),
         };
 
         let mut used = preamble.write(&mut output)?;

@@ -89,6 +89,7 @@ pub struct Preamble {
     pub(crate) segment_details: [SegmentDetail; 4],
     pub(crate) flags: u8,
     pub(crate) _reserved: u8,
+    pub(crate) inline_data: Vec<u8>,
 }
 
 impl Preamble {
@@ -149,14 +150,11 @@ impl Preamble {
         Ok(used)
     }
 
-    pub fn parse(input: &[u8], revision: Msgr2Revision) -> Result<Self, String> {
-        if input.len() != Self::SERIALIZED_SIZE {
-            return Err(format!(
-                "Expected 32 bytes of preamble data, got {}",
-                input.len()
-            ));
-        }
-
+    pub fn parse(
+        input: &[u8; Self::SERIALIZED_SIZE],
+        revision: Msgr2Revision,
+        inline_data: Vec<u8>,
+    ) -> Result<Self, String> {
         let (tag_scount, buffer) = input.split_at(2);
 
         let Ok(tag) = Tag::try_from(tag_scount[0]) else {
@@ -201,6 +199,7 @@ impl Preamble {
             segment_details,
             flags,
             _reserved,
+            inline_data,
         })
     }
 
