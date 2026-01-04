@@ -4,7 +4,7 @@ pub mod states;
 use states::{Active, Established, ExchangeHello, Inactive};
 
 use crate::{
-    Decode, DecodeError, Encode,
+    CryptoKey, Decode, DecodeError, Encode,
     connection::{
         encryption::Encryption,
         states::{Authenticating, Identifying},
@@ -195,21 +195,34 @@ impl<T> Connection<T>
 where
     T: Established,
 {
+    pub fn set_session_key(&mut self, key: CryptoKey, nonce: [u8; 12]) {
+        self.state.encryption_mut().set_secret_data(key, nonce);
+    }
+
     pub fn preamble_len(&self) -> usize {
-        // Fixed-size preamble for now
-        crate::frame::Preamble::SERIALIZED_SIZE
+        if self.state.encryption().is_secure() {
+            96
+        } else {
+            crate::frame::Preamble::SERIALIZED_SIZE
+        }
     }
 
     pub fn recv_preamble(&mut self, preamble_data: &[u8]) -> Result<Preamble, String> {
-        if preamble_data.len() != self.preamble_len() {
+        let expected_len = self.preamble_len();
+        if preamble_data.len() != expected_len {
             return Err(format!(
                 "Expected {} bytes of preamble data, got {}",
-                self.preamble_len(),
+                expected_len,
                 preamble_data.len()
             ));
         }
 
-        let preamble = Preamble::parse(preamble_data, self.state.revision())?;
+        self.buffer.clear();
+        self.buffer.extend_from_slice(preamble_data);
+
+        self.state.encryption().decrypt(&mut self.buffer);
+
+        let preamble = Preamble::parse(&self.buffer[..32], self.state.revision())?;
 
         Ok(preamble)
     }

@@ -3,6 +3,7 @@ use crate::{connection::encryption::Encryption, frame::Msgr2Revision};
 pub trait Established {
     fn revision(&self) -> Msgr2Revision;
     fn encryption(&self) -> &Encryption;
+    fn encryption_mut(&mut self) -> &mut Encryption;
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +45,10 @@ macro_rules! established {
 
                 fn encryption(&self) -> &Encryption {
                     &self.encryption
+                }
+
+                fn encryption_mut(&mut self) -> &mut Encryption {
+                    &mut self.encryption
                 }
             }
         )*
