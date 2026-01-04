@@ -21,8 +21,10 @@ fn valid_frame() {
     ];
 
     let rev = Msgr2Revision::V2_0;
-    let (preamble, frame_data) = frame_data.split_at(Preamble::SERIALIZED_SIZE);
-    let preamble = Preamble::parse(preamble, rev).unwrap();
+    let (preamble, frame_data) = frame_data
+        .split_first_chunk::<{ Preamble::SERIALIZED_SIZE }>()
+        .unwrap();
+    let preamble = Preamble::parse(preamble, rev, Vec::new()).unwrap();
 
     Frame::decode(&preamble, frame_data).expect("Valid frame should be parseable");
 }

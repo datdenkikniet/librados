@@ -222,7 +222,12 @@ where
 
         self.state.encryption().decrypt(&mut self.buffer);
 
-        let preamble = Preamble::parse(&self.buffer[..32], self.state.revision())?;
+        let (preamble, inline_data) = self
+            .buffer
+            .split_first_chunk()
+            .expect("self.preamble_len() >= 32");
+
+        let preamble = Preamble::parse(preamble, self.state.revision(), inline_data.to_vec())?;
 
         Ok(preamble)
     }
