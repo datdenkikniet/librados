@@ -39,11 +39,20 @@ pub struct Connection<T> {
 
 impl Connection<Inactive> {
     pub fn new(config: Config) -> Self {
-        Self {
-            state: Inactive { _reserved: () },
+        let mut me = Self {
+            state: Inactive {
+                _reserved: (),
+                rx_buf: Vec::new(),
+                tx_buf: Vec::new(),
+            },
             config,
             buffer: Vec::new(),
-        }
+        };
+
+        let banner = me.banner().to_bytes();
+        me.state.tx_buf.extend_from_slice(banner.as_slice());
+
+        me
     }
 
     pub fn banner(&self) -> Banner {
@@ -60,7 +69,11 @@ impl Connection<Inactive> {
     ///
     /// This step consumes the [`Connection`]. To retry connecting, you can
     /// clone the [`Connection<Inactive>`] and re-attempt to [`recv_banner`](Connection::recv_banner).
-    pub fn recv_banner(self, banner: &Banner) -> Result<Connection<ExchangeHello>, String> {
+    pub fn recv_banner(mut self, banner: &Banner) -> Result<Connection<ExchangeHello>, String> {
+        self.state
+            .rx_buf
+            .extend_from_slice(banner.to_bytes().as_slice());
+
         if banner.required().compression() {
             return Err("Peer requires compression, which we do not support.".into());
         }
@@ -73,6 +86,8 @@ impl Connection<Inactive> {
 
         Ok(Connection {
             state: ExchangeHello {
+                rx_buf: self.state.rx_buf,
+                tx_buf: self.state.tx_buf,
                 revision,
                 encryption: FrameEncryption::new(),
             },
@@ -87,16 +102,29 @@ impl Connection<ExchangeHello> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
 
-        Frame::new(Tag::Hello, &[&self.buffer], self.state.format()).unwrap()
+        let frame = Frame::new(Tag::Hello, &[&self.buffer], self.state.format()).unwrap();
+
+        frame.write(&mut self.state.tx_buf).unwrap();
+
+        frame
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
+        let ExchangeHello {
+            revision,
+            encryption,
+            rx_buf,
+            tx_buf,
+        } = self.state;
+
         Connection {
             config: self.config,
             buffer: self.buffer,
             state: Authenticating {
-                revision: self.state.revision,
-                encryption: self.state.encryption,
+                revision,
+                encryption,
+                rx_buf,
+                tx_buf,
             },
         }
     }
@@ -107,14 +135,22 @@ impl Connection<Authenticating> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.format()).unwrap()
+        let frame = Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.format()).unwrap();
+
+        frame.write(&mut self.state.tx_buf).unwrap();
+
+        frame
     }
 
     pub fn send_more(&mut self, request: &AuthRequestMore) -> Frame<'_> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.format()).unwrap()
+        let frame = Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.format()).unwrap();
+
+        frame.write(&mut self.state.tx_buf).unwrap();
+
+        frame
     }
 
     #[expect(unused)]
@@ -201,6 +237,10 @@ impl<T> Connection<T>
 where
     T: Established,
 {
+    pub fn state(&self) -> &T {
+        &self.state
+    }
+
     pub fn set_session_key(&mut self, key: CryptoKey, nonce: [u8; 12]) {
         self.state.encryption_mut().set_secret_data(key, nonce);
     }
@@ -228,6 +268,8 @@ where
 
         self.state.encryption().decrypt(&mut self.buffer);
 
+        self.state.recv_data(&self.buffer);
+
         let (preamble, inline_data) = self
             .buffer
             .split_first_chunk()
@@ -243,6 +285,18 @@ where
         preamble: &mut Preamble,
         frame_data: &[u8],
     ) -> Result<Message, DecodeError> {
+        self.state.recv_data(&frame_data);
+
+        let frame_data = if self.state.encryption().is_secure() && preamble.has_non_inline_data() {
+            self.buffer.clear();
+            self.buffer.copy_from_slice(frame_data);
+            self.state.encryption_mut().decrypt(&mut self.buffer);
+
+            &self.buffer
+        } else {
+            frame_data
+        };
+
         let frame = Frame::decode(preamble, frame_data)?;
 
         assert!(

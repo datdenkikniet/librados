@@ -234,6 +234,10 @@ impl Preamble {
             _ => None,
         }
     }
+
+    pub fn has_non_inline_data(&self) -> bool {
+        self.data_and_epilogue_len() != 0
+    }
 }
 
 #[derive(Default, Clone, Copy, Debug)]
