@@ -1,4 +1,7 @@
-use crate::{connection::encryption::FrameEncryption, frame::FrameFormat};
+use crate::{
+    connection::encryption::FrameEncryption, frame::FrameFormat,
+    messages::cephx::CephXServiceTicket,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Revision {
@@ -34,20 +37,31 @@ pub struct ExchangeHello {
 pub struct Authenticating {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
-    pub rx_buf: Vec<u8>,
-    pub tx_buf: Vec<u8>,
+    pub(crate) rx_buf: Vec<u8>,
+    pub(crate) tx_buf: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct ExchangingSignatures {
+    pub(crate) revision: Revision,
+    pub(crate) encryption: FrameEncryption,
+    pub(crate) rx_buf: Vec<u8>,
+    pub(crate) tx_buf: Vec<u8>,
+    pub(crate) auth_ticket: Option<CephXServiceTicket>,
 }
 
 #[derive(Debug)]
 pub struct Identifying {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
+    pub(crate) auth_ticket: Option<CephXServiceTicket>,
 }
 
 #[derive(Debug)]
 pub struct Active {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
+    pub(crate) _auth_ticket: Option<CephXServiceTicket>,
 }
 
 macro_rules! established {
@@ -85,4 +99,4 @@ macro_rules! established {
     };
 }
 
-established!(ExchangeHello rx_buf, Authenticating rx_buf, Active, Identifying);
+established!(ExchangeHello rx_buf, Authenticating rx_buf, ExchangingSignatures, Identifying, Active);
