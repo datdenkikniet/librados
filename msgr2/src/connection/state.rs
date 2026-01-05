@@ -13,7 +13,6 @@ pub trait Established {
     fn set_revision(&mut self, revision: Revision);
 
     fn recv_data(&mut self, _data: &[u8]) {}
-    fn send_data(&mut self, _data: &[u8]) {}
 }
 
 #[derive(Debug, Clone)]
@@ -52,7 +51,7 @@ pub struct Active {
 }
 
 macro_rules! established {
-    ($($st:ident $($rx_buf:ident $tx_buf:ident)?),*) => {
+    ($($st:ident $($rx_buf:ident)?),*) => {
         $(
             impl Established for $st {
                 fn format(&self) -> FrameFormat {
@@ -80,14 +79,10 @@ macro_rules! established {
                     fn recv_data(&mut self, data: &[u8]) {
                         self.$rx_buf.extend_from_slice(data);
                     }
-
-                    fn send_data(&mut self, data: &[u8]) {
-                        self.$tx_buf.extend_from_slice(data);
-                    }
                 )?
             }
         )*
     };
 }
 
-established!(ExchangeHello rx_buf tx_buf, Authenticating rx_buf tx_buf, Active, Identifying);
+established!(ExchangeHello rx_buf, Authenticating rx_buf, Active, Identifying);

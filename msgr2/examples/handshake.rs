@@ -63,7 +63,7 @@ fn main() {
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
     let config = Config::new(true);
-    let mut connection = ceph_protocol::connection::Connection::new(config);
+    let connection = ceph_protocol::connection::Connection::new(config);
 
     let mut banner = connection.banner().to_bytes();
 

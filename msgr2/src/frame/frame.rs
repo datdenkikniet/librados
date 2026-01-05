@@ -208,6 +208,22 @@ impl<'a> Frame<'a> {
             segments[idx] = VecOrSlice::Slice(segment);
         }
 
+        Self::handle_epilogue(preamble, crc_segment1, &segments, trailer)?;
+
+        Ok(Self {
+            format: preamble.format,
+            tag: preamble.tag,
+            valid_segments: preamble.segment_count,
+            segments,
+        })
+    }
+
+    fn handle_epilogue(
+        preamble: &Preamble,
+        crc_segment1: Option<u32>,
+        segments: &[VecOrSlice; 4],
+        trailer: &[u8],
+    ) -> Result<(), DecodeError> {
         let mut crcs = [0; 4];
 
         let completed = match preamble.format {
@@ -226,7 +242,27 @@ impl<'a> Frame<'a> {
                 }
             }
             FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => true,
+            FrameFormat::Rev1Secure => {
+                if !trailer.is_empty() {
+                    if trailer.len() != 16 {
+                        return Err(DecodeError::Custom(format!(
+                            "Expected 16 bytes of epilogue data, got {}",
+                            trailer.len()
+                        )));
+                    }
+
+                    if !trailer[1..].iter().all(|v| *v == 0) {
+                        return Err(DecodeError::Custom(
+                            "Trailing epilogue bytes were not zeroed.".to_string(),
+                        ));
+                    }
+
+                    let epilogue = Epilogue::decode(&trailer[..1], &mut [])?;
+                    epilogue.is_completed(preamble.format)
+                } else {
+                    true
+                }
+            }
         };
 
         if !completed {
@@ -258,12 +294,7 @@ impl<'a> Frame<'a> {
             }
         }
 
-        Ok(Self {
-            format: preamble.format,
-            tag: preamble.tag,
-            valid_segments: preamble.segment_count,
-            segments,
-        })
+        Ok(())
     }
 
     pub const fn tag(&self) -> Tag {

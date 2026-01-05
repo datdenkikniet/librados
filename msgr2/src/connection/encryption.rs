@@ -31,7 +31,7 @@ impl FrameEncryption {
         }
     }
 
-    pub fn decrypt(&self, buffer: &mut Vec<u8>) {
+    pub fn decrypt(&mut self, buffer: &mut Vec<u8>) {
         match &self.inner {
             EncryptionInner::None => {}
             EncryptionInner::CryptoKey {
@@ -39,6 +39,7 @@ impl FrameEncryption {
                 rx_nonce,
                 tx_nonce: _,
             } => {
+                // TODO: increase rx nonce
                 key.decrypt_gcm(&rx_nonce, buffer).unwrap();
             }
         }

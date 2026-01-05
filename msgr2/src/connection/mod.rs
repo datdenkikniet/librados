@@ -1,3 +1,4 @@
+mod config;
 mod encryption;
 pub mod state;
 
@@ -19,16 +20,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
-pub struct Config {
-    support_rev21: bool,
-}
-
-impl Config {
-    pub fn new(support_rev21: bool) -> Self {
-        Self { support_rev21 }
-    }
-}
+pub use config::*;
 
 #[derive(Clone, Debug)]
 pub struct Connection<T> {
@@ -58,7 +50,7 @@ impl Connection<Inactive> {
     pub fn banner(&self) -> Banner {
         let mut features = MsgrFeatures::empty();
 
-        if self.config.support_rev21 {
+        if self.config.support_rev21() {
             features.set_revision_21(true);
         }
 
@@ -78,7 +70,7 @@ impl Connection<Inactive> {
             return Err("Peer requires compression, which we do not support.".into());
         }
 
-        let revision = if self.config.support_rev21 && banner.supported().revision_21() {
+        let revision = if self.config.support_rev21() && banner.supported().revision_21() {
             Revision::Rev1
         } else {
             Revision::Rev0
@@ -248,11 +240,7 @@ where
     }
 
     pub fn preamble_len(&self) -> usize {
-        if self.state.encryption().is_secure() {
-            96
-        } else {
-            crate::frame::Preamble::SERIALIZED_SIZE
-        }
+        Preamble::len(&self.state.format())
     }
 
     pub fn recv_preamble(&mut self, preamble_data: &[u8]) -> Result<Preamble, String> {
@@ -268,7 +256,7 @@ where
         self.buffer.clear();
         self.buffer.extend_from_slice(preamble_data);
 
-        self.state.encryption().decrypt(&mut self.buffer);
+        self.state.encryption_mut().decrypt(&mut self.buffer);
 
         self.state.recv_data(&self.buffer);
 
