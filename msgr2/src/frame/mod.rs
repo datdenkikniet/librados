@@ -2,6 +2,8 @@ mod epilogue;
 mod frame;
 mod preamble;
 
+pub(crate) use frame::ParsedFrame;
+
 pub use frame::Frame;
 pub use preamble::{Preamble, Tag};
 
@@ -39,5 +41,5 @@ fn valid_frame() {
         .unwrap();
     let mut preamble = Preamble::parse(preamble, rev, Vec::new()).unwrap();
 
-    Frame::decode(&mut preamble, frame_data).expect("Valid frame should be parseable");
+    ParsedFrame::decode(&mut preamble, frame_data).expect("Valid frame should be parseable");
 }
