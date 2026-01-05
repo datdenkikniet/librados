@@ -4,20 +4,13 @@ use std::{
 };
 
 use ceph_protocol::{
-    CephFeatureSet, CryptoKey, Decode, Encode, EntityAddress, EntityAddressType, EntityName,
-    EntityType, Timestamp,
+    CephFeatureSet, CryptoKey, Decode, EntityAddress, EntityAddressType, EntityName, EntityType,
+    Timestamp,
     connection::{Config, Connection, Message, state::Established},
     frame::Frame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
-        auth::{
-            AuthMethodCephX, AuthRequest, AuthRequestMore, AuthSignature, CephXServerChallenge,
-            ConMode,
-        },
-        cephx::{
-            AuthServiceTicketInfos, CephXAuthenticate, CephXAuthenticateKey, CephXMessage,
-            CephXMessageType, CephXServiceTicket, CephXTicketBlob,
-        },
+        auth::{AuthMethodCephX, AuthRequest, ConMode},
     },
 };
 
@@ -121,27 +114,7 @@ fn main() {
         o => panic!("Expected AuthReplyMore, got {o:?}"),
     };
 
-    let challenge = CephXServerChallenge::decode(&mut more.payload.as_slice()).unwrap();
-
-    println!("Server challenge: {challenge:?}");
-
-    let client_challenge = 13377;
-    let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, &master_key);
-    let auth = CephXAuthenticate {
-        client_challenge,
-        key,
-        old_ticket: CephXTicketBlob {
-            secret_id: 0,
-            blob: Vec::new(),
-        },
-        other_keys: u8::from(EntityType::Mon) as u32 | u8::from(EntityType::Osd) as u32,
-    };
-
-    let auth_req_more = AuthRequestMore {
-        payload: CephXMessage::new(CephXMessageType::GetAuthSessionKey, auth).to_vec(),
-    };
-
-    let auth_req = connection.send_more(&auth_req_more);
+    let auth_req = connection.recv_cephx_server_challenge(&master_key, &more);
     send(auth_req, &mut stream);
 
     let rx_auth = match recv(&mut connection, &mut stream) {
@@ -151,80 +124,10 @@ fn main() {
 
     println!("Auth rx: {rx_auth:?}");
 
-    let auth_done = CephXMessage::decode(&mut rx_auth.auth_payload.as_slice()).unwrap();
+    let mut connection = connection.recv_cephx_done(&master_key, &rx_auth).unwrap();
 
-    if auth_done.ty() != CephXMessageType::GetAuthSessionKey {
-        panic!(
-            "Expected CephXMessage of type GetAuthSessionKey, got {:?}",
-            auth_done.ty()
-        );
-    }
-
-    let mut tickets = auth_done.payload();
-
-    let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets).unwrap();
-    assert!(tickets.is_empty());
-
-    let mut auth_service_ticket = None;
-    let mut auth_service_secret = None;
-
-    for info in &mut service_ticket_infos.info_list {
-        println!("Ticket entity: {:?}", info.service_id);
-        println!("Additional ticket data: {:?}", info.refresh_ticket);
-
-        let service_session_ticket: CephXServiceTicket =
-            ceph_protocol::crypto::decode_decrypt_enc_bl(
-                &mut info.encrypted_session_ticket,
-                &master_key,
-            )
-            .unwrap();
-
-        let _service_refresh_ticket = info.refresh_ticket.as_unencrypted_mut().unwrap();
-
-        let encrypted = service_ticket_infos.connection_secret.clone();
-        let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice()).unwrap().to_vec();
-        let connection_secret: &[u8] = ceph_protocol::crypto::decode_decrypt_enc_bl(
-            &mut encrypted,
-            &service_session_ticket.session_key,
-        )
-        .unwrap();
-
-        if info.service_id == EntityType::Auth {
-            auth_service_ticket = Some(service_session_ticket);
-            auth_service_secret = Some(connection_secret.to_vec());
-        }
-
-        println!("Connection secret len: {}", connection_secret.len());
-    }
-
-    println!("CBL len: {}", service_ticket_infos.connection_secret.len());
-    println!("Extra len: {}", service_ticket_infos.extra.len());
-
-    let Some(auth_service_ticket) = auth_service_ticket.take() else {
-        panic!("Did not get service ticket for auth service");
-    };
-
-    let Some(auth_service_secret) = auth_service_secret.take() else {
-        panic!("Did not get service secret for auth service");
-    };
-    // We are encrypted here: let's deal with that
-
-    let encryption_key = auth_service_secret[00..16].try_into().unwrap();
-    let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
-    let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
-
-    let encryption_key = CryptoKey::new(
-        Timestamp {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        encryption_key,
-    );
-
-    connection.set_session_secrets(encryption_key, rx_nonce, tx_nonce);
-
-    // let signature = connection.recv_done(&rx_auth);
-    // send(signature, &mut stream);
+    let signature = connection.send_signature();
+    send(signature, &mut stream);
 
     println!("Recv signature");
 
@@ -234,19 +137,7 @@ fn main() {
 
     println!("Signature rx: {rx_sig:?}");
 
-    let rx_buf = connection.state().rx_buf.clone();
-    let tx_buf = connection.state().tx_buf.clone();
-
-    let tx_signature = auth_service_ticket.session_key.hmac_sha256(&rx_buf);
-    let tx_signature = AuthSignature {
-        sha256: tx_signature,
-    };
-
-    let _send = tx_signature;
-
-    let mut connection = connection
-        .recv_signature(Some(&auth_service_ticket.session_key), &tx_buf, &rx_sig)
-        .unwrap();
+    let mut connection = connection.recv_signature(&rx_sig).unwrap();
 
     println!("Received signature was correct.");
 

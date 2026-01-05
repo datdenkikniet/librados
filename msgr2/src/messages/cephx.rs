@@ -3,7 +3,7 @@ use crate::{
     crypto::encode_encrypt,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct CephXTicketBlob {
     pub secret_id: u64,
     pub blob: Vec<u8>,
@@ -287,3 +287,10 @@ impl Encode for MaybeEncryptedCephXTicketBlob {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct CephXServerChallenge {
+    pub challenge: u64,
+}
+
+write_decode_encode!(CephXServerChallenge = const version 1 as u8 | challenge);

@@ -6,7 +6,7 @@ mod signature;
 
 pub use bad_method::AuthBadMethod;
 pub use done::AuthDone;
-pub use reply_more::{AuthReplyMore, CephXServerChallenge};
+pub use reply_more::AuthReplyMore;
 pub use request::{
     AuthMethodCephX, AuthMethodNone, AuthRequest, AuthRequestMore, AuthRequestPayload,
 };

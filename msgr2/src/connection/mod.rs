@@ -2,14 +2,14 @@ mod config;
 mod encryption;
 pub mod state;
 
-use state::{Active, Established, ExchangeHello, Inactive};
+use state::{
+    Active, Authenticating, Established, ExchangeHello, ExchangingSignatures, Identifying, Inactive,
+};
 
 use crate::{
-    CryptoKey, Decode, DecodeError, Encode,
-    connection::{
-        encryption::FrameEncryption,
-        state::{Authenticating, Identifying, Revision},
-    },
+    CryptoKey, Decode, DecodeError, Encode, EntityType, Timestamp,
+    connection::{encryption::FrameEncryption, state::Revision},
+    crypto::decode_decrypt_enc_bl,
     frame::{Frame, Preamble, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
@@ -17,16 +17,48 @@ use crate::{
         auth::{
             AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
         },
+        cephx::{AuthServiceTicketInfos, CephXMessage, CephXMessageType, CephXServiceTicket},
     },
 };
 
 pub use config::*;
 
 #[derive(Clone, Debug)]
+pub enum AuthError {
+    Decode(DecodeError),
+    NoAuthTicket,
+    NoConnectionSecret,
+    UnexpectedCephXMessage {
+        got: CephXMessageType,
+        expected: CephXMessageType,
+    },
+    UnexpectedData,
+}
+
+impl From<DecodeError> for AuthError {
+    fn from(value: DecodeError) -> Self {
+        Self::Decode(value)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Connection<T> {
     state: T,
     config: Config,
     buffer: Vec<u8>,
+}
+
+impl<T> Connection<T> {
+    pub fn with_state<F, S>(self, state: F) -> Connection<S>
+    where
+        F: FnOnce(T) -> S,
+    {
+        Connection {
+            state: state(self.state),
+            config: self.config,
+            buffer: self.buffer,
+        }
+    }
 }
 
 impl Connection<Inactive> {
@@ -76,16 +108,12 @@ impl Connection<Inactive> {
             Revision::Rev0
         };
 
-        Ok(Connection {
-            state: ExchangeHello {
-                rx_buf: self.state.rx_buf,
-                tx_buf: self.state.tx_buf,
-                revision,
-                encryption: FrameEncryption::new(),
-            },
-            buffer: Vec::new(),
-            config: self.config,
-        })
+        Ok(self.with_state(|state| ExchangeHello {
+            rx_buf: state.rx_buf,
+            tx_buf: state.tx_buf,
+            revision,
+            encryption: FrameEncryption::new(),
+        }))
     }
 }
 
@@ -102,23 +130,12 @@ impl Connection<ExchangeHello> {
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
-        let ExchangeHello {
-            revision,
-            encryption,
-            rx_buf,
-            tx_buf,
-        } = self.state;
-
-        Connection {
-            config: self.config,
-            buffer: self.buffer,
-            state: Authenticating {
-                revision,
-                encryption,
-                rx_buf,
-                tx_buf,
-            },
-        }
+        self.with_state(|state| Authenticating {
+            revision: state.revision,
+            encryption: state.encryption,
+            rx_buf: state.rx_buf,
+            tx_buf: state.tx_buf,
+        })
     }
 }
 
@@ -134,9 +151,49 @@ impl Connection<Authenticating> {
         frame
     }
 
-    pub fn send_more(&mut self, request: &AuthRequestMore) -> Frame<'_> {
+    pub fn recv_cephx_server_challenge(
+        &mut self,
+        master_key: &CryptoKey,
+        challenge: &AuthReplyMore,
+    ) -> Frame<'_> {
+        use crate::messages::cephx::*;
+
+        let challenge = CephXServerChallenge::decode(&mut challenge.payload.as_slice()).unwrap();
+
+        // TODO: this should be random data.
+        let client_challenge = 13377;
+        let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, &master_key);
+
+        let other_keys = self
+            .config
+            .tickets_for()
+            .iter()
+            // other_keys must be non-zero.
+            //
+            // For now: always request ticket for auth.
+            // TODO: figure out how the auth flow works
+            // for non-auth servers.
+            .chain([EntityType::Auth].iter())
+            .fold(0u32, |acc, v| acc | u8::from(*v) as u32);
+
+        let old_ticket = self
+            .config
+            .old_ticket()
+            .unwrap_or(CephXTicketBlob::default());
+
+        let auth = CephXAuthenticate {
+            client_challenge,
+            key,
+            old_ticket,
+            other_keys,
+        };
+
+        let auth_req_more = AuthRequestMore {
+            payload: CephXMessage::new(CephXMessageType::GetAuthSessionKey, auth).to_vec(),
+        };
+
         self.buffer.clear();
-        request.encode(&mut self.buffer);
+        auth_req_more.encode(&mut self.buffer);
 
         let frame = Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.format()).unwrap();
 
@@ -145,17 +202,118 @@ impl Connection<Authenticating> {
         frame
     }
 
-    #[expect(unused)]
-    pub fn recv_done(&mut self, done: &AuthDone) -> Frame<'_> {
-        // TODO: do something with `done`.
+    pub fn recv_none_done(
+        self,
+        done: &AuthDone,
+    ) -> Result<Connection<ExchangingSignatures>, AuthError> {
+        if !done.auth_payload.is_empty() {
+            Err(AuthError::UnexpectedData)
+        } else {
+            Ok(self.with_state(|state| ExchangingSignatures {
+                revision: state.revision,
+                encryption: state.encryption,
+                rx_buf: state.rx_buf,
+                tx_buf: state.tx_buf,
+                auth_ticket: None,
+            }))
+        }
+    }
 
-        self.buffer.clear();
+    pub fn recv_cephx_done(
+        mut self,
+        master_key: &CryptoKey,
+        done: &AuthDone,
+    ) -> Result<Connection<ExchangingSignatures>, AuthError> {
+        // TODO: save/use global ID somewhere?
+        let auth_done = CephXMessage::decode(&mut done.auth_payload.as_slice())?;
 
-        let signature = AuthSignature {
-            // TODO: actually calculate SHA256 with done info
-            sha256: [0u8; _],
+        if auth_done.ty() != CephXMessageType::GetAuthSessionKey {
+            return Err(AuthError::UnexpectedCephXMessage {
+                expected: CephXMessageType::GetAuthSessionKey,
+                got: auth_done.ty(),
+            });
+        }
+
+        let mut tickets = auth_done.payload();
+
+        let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets)?;
+        assert!(tickets.is_empty());
+
+        let mut auth_service_ticket = None;
+        let mut auth_connection_secret = None;
+
+        for info in &mut service_ticket_infos.info_list {
+            println!("Ticket entity: {:?}", info.service_id);
+            println!("Additional ticket data: {:?}", info.refresh_ticket);
+
+            let service_session_ticket: CephXServiceTicket =
+                decode_decrypt_enc_bl(&mut info.encrypted_session_ticket, &master_key)?;
+
+            // TODO: do something with this (refresh?) ticket
+            let _service_refresh_ticket = &info.refresh_ticket;
+
+            let encrypted = service_ticket_infos.connection_secret.clone();
+            let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice())?.to_vec();
+            let connection_secret: &[u8] =
+                decode_decrypt_enc_bl(&mut encrypted, &service_session_ticket.session_key)?;
+
+            if info.service_id == EntityType::Auth {
+                auth_service_ticket = Some(service_session_ticket);
+                auth_connection_secret = Some(connection_secret.to_vec());
+            }
+        }
+
+        // TODO: decode/use extra
+
+        let Some(auth_service_ticket) = auth_service_ticket.take() else {
+            return Err(AuthError::NoAuthTicket);
         };
 
+        let Some(auth_service_secret) = auth_connection_secret.take() else {
+            return Err(AuthError::NoConnectionSecret);
+        };
+
+        // We are encrypted here: let's deal with that
+
+        let encryption_key = auth_service_secret[00..16].try_into().unwrap();
+        let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
+        let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
+
+        let encryption_key = CryptoKey::new(
+            // TODO: probably best not to have this creation time be not completely BS
+            Timestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            encryption_key,
+        );
+
+        self.state
+            .encryption_mut()
+            .set_secret_data(encryption_key, rx_nonce, tx_nonce);
+
+        Ok(self.with_state(|state| ExchangingSignatures {
+            auth_ticket: Some(auth_service_ticket),
+            revision: state.revision,
+            encryption: state.encryption,
+            rx_buf: state.rx_buf,
+            tx_buf: state.tx_buf,
+        }))
+    }
+}
+
+impl Connection<ExchangingSignatures> {
+    pub fn send_signature(&mut self) -> Frame<'_> {
+        let signature =
+            if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
+                session_key.hmac_sha256(&self.state.rx_buf)
+            } else {
+                [0u8; 32]
+            };
+
+        let signature = AuthSignature { sha256: signature };
+
+        self.buffer.clear();
         signature.encode(&mut self.buffer);
 
         Frame::new(Tag::AuthSignature, &[&self.buffer], self.state.format()).unwrap()
@@ -163,26 +321,24 @@ impl Connection<Authenticating> {
 
     pub fn recv_signature(
         self,
-        auth_service_session_key: Option<&CryptoKey>,
-        tx_buf: &[u8],
         signature: &AuthSignature,
     ) -> Result<Connection<Identifying>, String> {
-        let valid_signature = auth_service_session_key
-            .map(|v| v.hmac_sha256(&tx_buf) == signature.sha256)
-            .unwrap_or(signature.sha256 == [0u8; _]);
+        let valid_signature =
+            if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
+                session_key.hmac_sha256(&self.state.tx_buf)
+            } else {
+                [0u8; 32]
+            };
 
-        if !valid_signature {
+        if signature.sha256 != valid_signature {
             return Err("SHA256 mismatch".into());
         }
 
-        Ok(Connection {
-            state: Identifying {
-                revision: self.state.revision,
-                encryption: self.state.encryption,
-            },
-            config: self.config,
-            buffer: self.buffer,
-        })
+        Ok(self.with_state(|state| Identifying {
+            revision: state.revision,
+            encryption: state.encryption,
+            auth_ticket: state.auth_ticket,
+        }))
     }
 }
 
@@ -198,14 +354,11 @@ impl Connection<Identifying> {
     pub fn recv_server_ident(self, ident: &ServerIdent) -> Result<Connection<Active>, String> {
         // TODO: verify details from `ident`.
 
-        Ok(Connection {
-            state: Active {
-                revision: self.state.revision,
-                encryption: self.state.encryption,
-            },
-            config: self.config,
-            buffer: self.buffer,
-        })
+        Ok(self.with_state(|state| Active {
+            revision: state.revision,
+            encryption: state.encryption,
+            _auth_ticket: state.auth_ticket,
+        }))
     }
 }
 
@@ -231,12 +384,6 @@ where
 {
     pub fn state(&self) -> &T {
         &self.state
-    }
-
-    pub fn set_session_secrets(&mut self, key: CryptoKey, rx_nonce: [u8; 12], tx_nonce: [u8; 12]) {
-        self.state
-            .encryption_mut()
-            .set_secret_data(key, rx_nonce, tx_nonce);
     }
 
     pub fn preamble_len(&self) -> usize {

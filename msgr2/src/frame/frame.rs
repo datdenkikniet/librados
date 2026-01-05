@@ -185,14 +185,13 @@ impl<'a> Frame<'a> {
             };
 
             if preamble.format == FrameFormat::Rev1Crc {
-                let (crc, left) =
-                    trailer
-                        .split_first_chunk::<4>()
-                        .ok_or_else(|| DecodeError::NotEnoughData {
-                            field: Some("crc"),
-                            have: trailer.len(),
-                            need: len,
-                        })?;
+                let err = || DecodeError::NotEnoughData {
+                    field: Some("crc1"),
+                    have: trailer.len(),
+                    need: len,
+                };
+
+                let (crc, left) = trailer.split_first_chunk::<4>().ok_or_else(err)?;
 
                 crc_segment1 = Some(u32::from_le_bytes(*crc));
                 trailer = left;
