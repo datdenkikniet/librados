@@ -1,14 +1,21 @@
 use crate::CryptoKey;
 
 #[derive(Debug)]
-pub struct Encryption {
+pub struct FrameEncryption {
     inner: EncryptionInner,
 }
 
-impl Encryption {
+impl FrameEncryption {
     pub fn new() -> Self {
         Self {
             inner: EncryptionInner::None,
+        }
+    }
+
+    pub fn session_key(&self) -> Option<&CryptoKey> {
+        match &self.inner {
+            EncryptionInner::None => None,
+            EncryptionInner::CryptoKey { key, .. } => Some(key),
         }
     }
 

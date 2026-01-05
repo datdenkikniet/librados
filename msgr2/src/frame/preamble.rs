@@ -86,7 +86,7 @@ impl TryFrom<u8> for Tag {
 
 #[derive(Debug)]
 pub struct Preamble {
-    pub(crate) revision: FrameFormat,
+    pub(crate) format: FrameFormat,
     pub(crate) tag: Tag,
     pub(crate) segment_count: NonZeroU8,
     pub(crate) segment_details: [SegmentDetail; 4],
@@ -101,7 +101,7 @@ impl Preamble {
     pub fn data_and_epilogue_len(&self) -> usize {
         let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
 
-        match self.revision {
+        match self.format {
             FrameFormat::Rev0Crc => segment_data + Epilogue::SERIALIZED_SIZE_V2_0,
             FrameFormat::Rev1Crc => {
                 let first_segment_crc = if self.segments()[0].len() > 0 { 4 } else { 0 };
@@ -171,7 +171,7 @@ impl Preamble {
 
     pub fn parse(
         input: &[u8; Self::SERIALIZED_SIZE],
-        revision: FrameFormat,
+        format: FrameFormat,
         mut inline_data: Vec<u8>,
     ) -> Result<Self, String> {
         let (tag_scount, buffer) = input.split_at(2);
@@ -214,7 +214,7 @@ impl Preamble {
         inline_data.truncate(segment_details[0].len());
 
         Ok(Self {
-            revision,
+            format,
             tag,
             segment_count,
             segment_details,
@@ -229,7 +229,7 @@ impl Preamble {
     }
 
     pub fn inline_data(&mut self) -> Option<Vec<u8>> {
-        match self.revision {
+        match self.format {
             FrameFormat::Rev1Secure => Some(std::mem::take(&mut self.inline_data)),
             _ => None,
         }

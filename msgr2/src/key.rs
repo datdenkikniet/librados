@@ -1,5 +1,6 @@
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 use aes_gcm::{Aes128Gcm, KeyInit, aead::AeadMutInPlace};
+use hmac::{Mac, digest::FixedOutput};
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
 pub const AES_GCM_SIG_SIZE: usize = 16;
@@ -65,6 +66,13 @@ impl CryptoKey {
             created,
             secret: secret.to_vec(),
         }
+    }
+
+    pub fn hmac_sha256(&self, buf: &[u8]) -> [u8; 32] {
+        let mut maybe_expected =
+            <hmac::Hmac<sha2::Sha256> as Mac>::new_from_slice(&self.secret).unwrap();
+        Mac::update(&mut maybe_expected, buf);
+        maybe_expected.finalize_fixed().into()
     }
 
     pub fn encrypt(&self, data: &mut Vec<u8>) {

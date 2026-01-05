@@ -41,14 +41,14 @@ impl core::ops::Deref for VecOrSlice<'_> {
 
 #[derive(Debug, Clone)]
 pub struct Frame<'a> {
-    revision: FrameFormat,
+    format: FrameFormat,
     tag: Tag,
     valid_segments: NonZeroU8,
     segments: [VecOrSlice<'a>; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], revision: FrameFormat) -> Option<Self> {
+    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], format: FrameFormat) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
         }
@@ -67,7 +67,7 @@ impl<'a> Frame<'a> {
         }
 
         Some(Self {
-            revision,
+            format,
             tag,
             valid_segments,
             segments: segments_out,
@@ -90,7 +90,7 @@ impl<'a> Frame<'a> {
         }
 
         let preamble = Preamble {
-            revision: self.revision,
+            format: self.format,
             flags: 0,
             tag: self.tag,
             segment_count: self.valid_segments,
@@ -108,13 +108,13 @@ impl<'a> Frame<'a> {
             output.write_all(segment)?;
             used += segment.len();
 
-            if self.revision == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
+            if self.format == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
                 output.write_all(&crc.to_le_bytes())?;
                 used += 4;
             }
         }
 
-        used += match self.revision {
+        used += match self.format {
             FrameFormat::Rev0Crc => {
                 let epilogue = Epilogue {
                     late_flags: 0,
@@ -184,7 +184,7 @@ impl<'a> Frame<'a> {
                 VecOrSlice::Slice(segment)
             };
 
-            if preamble.revision == FrameFormat::Rev1Crc {
+            if preamble.format == FrameFormat::Rev1Crc {
                 let (crc, left) =
                     trailer
                         .split_first_chunk::<4>()
@@ -210,17 +210,17 @@ impl<'a> Frame<'a> {
 
         let mut crcs = [0; 4];
 
-        let completed = match preamble.revision {
+        let completed = match preamble.format {
             FrameFormat::Rev0Crc => {
                 let epilogue = Epilogue::decode(trailer, &mut crcs)?;
-                epilogue.is_completed(preamble.revision)
+                epilogue.is_completed(preamble.format)
             }
             FrameFormat::Rev1Crc => {
                 crcs[0] = crc_segment1.unwrap_or(0xFFFF_FFFF);
 
                 if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
                     let epilogue = Epilogue::decode(trailer, &mut crcs[1..])?;
-                    epilogue.is_completed(preamble.revision)
+                    epilogue.is_completed(preamble.format)
                 } else {
                     true
                 }
@@ -235,7 +235,7 @@ impl<'a> Frame<'a> {
             ));
         }
 
-        if preamble.revision.has_crc() {
+        if preamble.format.has_crc() {
             for (idx, crc) in crcs.iter().copied().enumerate() {
                 if idx < preamble.segment_count.get() as usize {
                     let segment = &segments[idx];
@@ -259,7 +259,7 @@ impl<'a> Frame<'a> {
         }
 
         Ok(Self {
-            revision: preamble.revision,
+            format: preamble.format,
             tag: preamble.tag,
             valid_segments: preamble.segment_count,
             segments,
