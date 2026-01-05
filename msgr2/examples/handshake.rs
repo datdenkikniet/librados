@@ -221,7 +221,7 @@ fn main() {
         encryption_key,
     );
 
-    connection.set_session_key(encryption_key, rx_nonce);
+    connection.set_session_secrets(encryption_key, rx_nonce, tx_nonce);
 
     // let signature = connection.recv_done(&rx_auth);
     // send(signature, &mut stream);

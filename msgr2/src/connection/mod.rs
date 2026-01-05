@@ -241,8 +241,10 @@ where
         &self.state
     }
 
-    pub fn set_session_key(&mut self, key: CryptoKey, nonce: [u8; 12]) {
-        self.state.encryption_mut().set_secret_data(key, nonce);
+    pub fn set_session_secrets(&mut self, key: CryptoKey, rx_nonce: [u8; 12], tx_nonce: [u8; 12]) {
+        self.state
+            .encryption_mut()
+            .set_secret_data(key, rx_nonce, tx_nonce);
     }
 
     pub fn preamble_len(&self) -> usize {
