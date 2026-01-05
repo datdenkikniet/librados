@@ -11,23 +11,32 @@ pub trait Established {
     fn encryption(&self) -> &FrameEncryption;
     fn encryption_mut(&mut self) -> &mut FrameEncryption;
     fn set_revision(&mut self, revision: Revision);
+
+    fn recv_data(&mut self, _data: &[u8]) {}
+    fn send_data(&mut self, _data: &[u8]) {}
 }
 
 #[derive(Debug, Clone)]
 pub struct Inactive {
     pub(crate) _reserved: (),
+    pub(crate) rx_buf: Vec<u8>,
+    pub(crate) tx_buf: Vec<u8>,
 }
 
 #[derive(Debug)]
 pub struct ExchangeHello {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
+    pub(crate) rx_buf: Vec<u8>,
+    pub(crate) tx_buf: Vec<u8>,
 }
 
 #[derive(Debug)]
 pub struct Authenticating {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
+    pub rx_buf: Vec<u8>,
+    pub tx_buf: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -43,7 +52,7 @@ pub struct Active {
 }
 
 macro_rules! established {
-    ($($st:ident),*) => {
+    ($($st:ident $($rx_buf:ident $tx_buf:ident)?),*) => {
         $(
             impl Established for $st {
                 fn format(&self) -> FrameFormat {
@@ -66,9 +75,19 @@ macro_rules! established {
                 fn encryption_mut(&mut self) -> &mut FrameEncryption {
                     &mut self.encryption
                 }
+
+                $(
+                    fn recv_data(&mut self, data: &[u8]) {
+                        self.$rx_buf.extend_from_slice(data);
+                    }
+
+                    fn send_data(&mut self, data: &[u8]) {
+                        self.$tx_buf.extend_from_slice(data);
+                    }
+                )?
             }
         )*
     };
 }
 
-established!(ExchangeHello, Active, Authenticating, Identifying);
+established!(ExchangeHello rx_buf tx_buf, Authenticating rx_buf tx_buf, Active, Identifying);
