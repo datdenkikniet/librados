@@ -10,7 +10,7 @@ use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityType, Timestamp,
     connection::{encryption::FrameEncryption, state::Revision},
     crypto::decode_decrypt_enc_bl,
-    frame::{Frame, Preamble, Tag},
+    frame::{Frame, ParsedFrame, Preamble, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -121,12 +121,18 @@ impl Connection<ExchangeHello> {
     pub fn send_hello(&mut self, hello: &Hello) -> Frame<'_> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
+        let hello = self.buffer.clone();
 
-        let frame = Frame::new(Tag::Hello, &[&self.buffer], self.state.format()).unwrap();
+        let frame = ParsedFrame::new(Tag::Hello, &[&hello], self.state.format()).unwrap();
 
-        frame.write(&mut self.state.tx_buf).unwrap();
+        frame.write(&mut self.state.tx_buf);
 
-        frame
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
@@ -144,11 +150,17 @@ impl Connection<Authenticating> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
-        let frame = Frame::new(Tag::AuthRequest, &[&self.buffer], self.state.format()).unwrap();
+        let request = self.buffer.to_vec();
+        let frame = ParsedFrame::new(Tag::AuthRequest, &[&request], self.state.format()).unwrap();
 
-        frame.write(&mut self.state.tx_buf).unwrap();
+        frame.write(&mut self.state.tx_buf);
 
-        frame
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 
     pub fn recv_cephx_server_challenge(
@@ -195,11 +207,17 @@ impl Connection<Authenticating> {
         self.buffer.clear();
         auth_req_more.encode(&mut self.buffer);
 
-        let frame = Frame::new(Tag::AuthRequestMore, &[&self.buffer], self.state.format()).unwrap();
+        let more = self.buffer.clone();
+        let frame = ParsedFrame::new(Tag::AuthRequestMore, &[&more], self.state.format()).unwrap();
 
-        frame.write(&mut self.state.tx_buf).unwrap();
+        frame.write(&mut self.state.tx_buf);
 
-        frame
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 
     pub fn recv_none_done(
@@ -316,7 +334,16 @@ impl Connection<ExchangingSignatures> {
         self.buffer.clear();
         signature.encode(&mut self.buffer);
 
-        Frame::new(Tag::AuthSignature, &[&self.buffer], self.state.format()).unwrap()
+        let signature = self.buffer.clone();
+        let frame =
+            ParsedFrame::new(Tag::AuthSignature, &[&signature], self.state.format()).unwrap();
+
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 
     pub fn recv_signature(
@@ -347,7 +374,15 @@ impl Connection<Identifying> {
         self.buffer.clear();
         ident.encode(&mut self.buffer);
 
-        Frame::new(Tag::ClientIdent, &[&self.buffer], self.state.format()).unwrap()
+        let ident = self.buffer.clone();
+        let frame = ParsedFrame::new(Tag::ClientIdent, &[&ident], self.state.format()).unwrap();
+
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 
     #[expect(unused)]
@@ -374,7 +409,15 @@ impl Connection<Active> {
         self.buffer.clear();
         message.write_to(&mut self.buffer);
 
-        Frame::new(message.tag(), &[&self.buffer], self.state.format()).unwrap()
+        let buffer = self.buffer.clone();
+        let frame = ParsedFrame::new(message.tag(), &[&buffer], self.state.format()).unwrap();
+
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        Frame {
+            data: &mut self.buffer,
+        }
     }
 }
 
@@ -434,7 +477,7 @@ where
             frame_data
         };
 
-        let frame = Frame::decode(preamble, frame_data)?;
+        let frame = ParsedFrame::decode(preamble, frame_data)?;
 
         assert!(
             frame.segments().count() == 1,

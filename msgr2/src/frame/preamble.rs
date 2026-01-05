@@ -142,43 +142,30 @@ impl Preamble {
         }
     }
 
-    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        let mut buffer = [0u8; Self::SERIALIZED_SIZE];
+    pub fn write(&self, output: &mut Vec<u8>) {
+        output.reserve(Self::SERIALIZED_SIZE);
 
-        buffer[0] = self.tag as _;
-        buffer[1] = self.segment_count.get();
+        output.push(self.tag as _);
+        output.push(self.segment_count.get());
 
-        let mut used = 2;
         for (idx, detail) in self.segment_details.iter().enumerate() {
-            let start = used;
-            let end = start + 6;
-            used += 6;
-
-            let buffer = &mut buffer[start..end];
-
             if idx < self.segment_count.get() as usize {
-                detail.write(buffer)?;
+                detail.write(output);
             } else {
-                buffer.copy_from_slice(&[0u8; 6]);
+                output.extend_from_slice(&[0u8; 6]);
             }
         }
 
-        buffer[used] = self.flags;
-        used += 1;
+        output.push(self.flags);
 
         // Reserved
-        buffer[used] = self._reserved;
-        used += 1;
+        output.push(self._reserved);
 
         // Calculate crc
-        assert_eq!(used, 28);
-        let crc = CRC.checksum(&buffer[..used]);
-        buffer[used..used + 4].copy_from_slice(&crc.to_le_bytes());
-
-        output.write_all(&buffer)?;
-        used += 4;
-
-        Ok(used)
+        let end = output.len();
+        let start = output.len() - 28;
+        let crc = CRC.checksum(&output[start..end]);
+        output.extend_from_slice(&crc.to_le_bytes());
     }
 
     pub fn parse(
@@ -269,10 +256,9 @@ impl SegmentDetail {
         }
     }
 
-    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        output.write_all(&self.length.to_le_bytes())?;
-        output.write_all(&self.alignment.to_le_bytes())?;
-        Ok(6)
+    pub fn write(&self, output: &mut Vec<u8>) {
+        output.extend_from_slice(&self.length.to_le_bytes());
+        output.extend_from_slice(&self.alignment.to_le_bytes());
     }
 
     pub fn len(&self) -> usize {

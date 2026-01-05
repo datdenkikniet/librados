@@ -39,15 +39,27 @@ impl core::ops::Deref for VecOrSlice<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Frame<'a> {
+    pub(crate) data: &'a mut Vec<u8>,
+}
+
+impl Frame<'_> {
+    pub fn write(self, mut output: impl std::io::Write) -> std::io::Result<usize> {
+        output.write_all(&self.data)?;
+        Ok(self.data.len())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParsedFrame<'a> {
     format: FrameFormat,
     tag: Tag,
     valid_segments: NonZeroU8,
     segments: [VecOrSlice<'a>; 4],
 }
 
-impl<'a> Frame<'a> {
+impl<'a> ParsedFrame<'a> {
     pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], format: FrameFormat) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
@@ -74,13 +86,7 @@ impl<'a> Frame<'a> {
         })
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        let mut output = Vec::new();
-        self.write(&mut output).unwrap();
-        output
-    }
-
-    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
+    pub fn write(&self, output: &mut Vec<u8>) {
         let mut segment_details = [SegmentDetail::default(); 4];
         for (idx, segment) in self.segments().enumerate() {
             segment_details[idx] = SegmentDetail {
@@ -99,29 +105,27 @@ impl<'a> Frame<'a> {
             inline_data: Vec::new(),
         };
 
-        let mut used = preamble.write(&mut output)?;
+        preamble.write(output);
         let mut crcs = [0u32; 4];
 
         for (idx, segment) in self.segments().enumerate() {
             let crc = CRC.checksum(segment);
             crcs[idx] = crc;
-            output.write_all(segment)?;
-            used += segment.len();
+            output.extend_from_slice(segment);
 
             if self.format == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
-                output.write_all(&crc.to_le_bytes())?;
-                used += 4;
+                output.extend_from_slice(&crc.to_le_bytes());
             }
         }
 
-        used += match self.format {
+        match self.format {
             FrameFormat::Rev0Crc => {
                 let epilogue = Epilogue {
                     late_flags: 0,
                     crcs: &crcs,
                 };
 
-                epilogue.write(&mut output)?
+                epilogue.write(output);
             }
             FrameFormat::Rev1Crc => {
                 let need_epilogue = self.segments().skip(1).any(|v| v.len() > 0);
@@ -132,16 +136,14 @@ impl<'a> Frame<'a> {
                         crcs: &crcs[1..],
                     };
 
-                    epilogue.write(&mut output)?
-                } else {
-                    0
+                    epilogue.write(output);
                 }
             }
             FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => 0,
+            FrameFormat::Rev1Secure => {
+                // TODO: this is quite incorrect xd
+            }
         };
-
-        Ok(used)
     }
 
     pub fn decode(preamble: &'a mut Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {

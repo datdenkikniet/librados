@@ -9,14 +9,12 @@ pub struct Epilogue<'a> {
 impl<'a> Epilogue<'a> {
     pub const SERIALIZED_SIZE_V2_0: usize = 17;
 
-    pub fn write(&self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        output.write_all(&[self.late_flags])?;
+    pub fn write(&self, output: &mut Vec<u8>) {
+        output.push(self.late_flags);
 
         for crc in self.crcs.iter().copied() {
-            output.write_all(&crc.to_le_bytes())?;
+            output.extend_from_slice(&crc.to_le_bytes());
         }
-
-        Ok(1 + 4 * 4)
     }
 
     pub fn decode(data: &[u8], crcs: &'a mut [u32]) -> Result<Self, DecodeError> {

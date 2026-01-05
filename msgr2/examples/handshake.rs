@@ -14,18 +14,10 @@ use ceph_protocol::{
     },
 };
 
-fn send(frame: Frame<'_>, w: &mut impl std::io::Write) {
-    let to_send = frame.to_vec();
+fn send(frame: Frame<'_>, mut w: &mut impl std::io::Write) {
+    println!("Sending: {:?}", frame);
 
-    println!(
-        "Sending: {:?}, {}, {}",
-        frame,
-        frame.segments().next().unwrap().len(),
-        to_send.len()
-    );
-
-    w.write_all(&to_send).unwrap();
-    w.flush().unwrap();
+    frame.write(&mut w).unwrap();
 }
 
 fn recv<S>(connection: &mut Connection<S>, r: &mut impl std::io::Read) -> Message
