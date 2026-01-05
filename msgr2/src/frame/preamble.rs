@@ -97,6 +97,18 @@ pub struct Preamble {
 
 impl Preamble {
     pub const SERIALIZED_SIZE: usize = 32;
+    pub const REV1_SECURE_INLINE_SIZE: usize = 48;
+
+    pub fn len(format: &FrameFormat) -> usize {
+        match format {
+            crate::frame::FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+            crate::frame::FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+            crate::frame::FrameFormat::Rev0Secure => todo!(),
+            crate::frame::FrameFormat::Rev1Secure => {
+                Preamble::SERIALIZED_SIZE + Preamble::REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
+            }
+        }
+    }
 
     pub fn data_and_epilogue_len(&self) -> usize {
         let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
@@ -113,7 +125,7 @@ impl Preamble {
             FrameFormat::Rev1Secure => {
                 let first_segment_data_len = {
                     let first_segment_len = self.segments()[0].len();
-                    first_segment_len - (48.min(first_segment_len))
+                    first_segment_len - (Self::REV1_SECURE_INLINE_SIZE.min(first_segment_len))
                 };
 
                 let other_segments_data_len: usize =
