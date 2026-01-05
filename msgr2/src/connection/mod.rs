@@ -6,7 +6,7 @@ use state::{Active, Established, ExchangeHello, Inactive};
 use crate::{
     CryptoKey, Decode, DecodeError, Encode,
     connection::{
-        encryption::Encryption,
+        encryption::FrameEncryption,
         state::{Authenticating, Identifying, Revision},
     },
     frame::{Frame, Preamble, Tag},
@@ -74,7 +74,7 @@ impl Connection<Inactive> {
         Ok(Connection {
             state: ExchangeHello {
                 revision,
-                encryption: Encryption::new(),
+                encryption: FrameEncryption::new(),
             },
             buffer: Vec::new(),
             config: self.config,
@@ -135,9 +135,15 @@ impl Connection<Authenticating> {
 
     pub fn recv_signature(
         self,
+        auth_service_session_key: Option<&CryptoKey>,
+        tx_buf: &[u8],
         signature: &AuthSignature,
     ) -> Result<Connection<Identifying>, String> {
-        if signature.sha256 != [0u8; _] {
+        let valid_signature = auth_service_session_key
+            .map(|v| v.hmac_sha256(&tx_buf) == signature.sha256)
+            .unwrap_or(signature.sha256 == [0u8; _]);
+
+        if !valid_signature {
             return Err("SHA256 mismatch".into());
         }
 

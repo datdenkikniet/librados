@@ -1,4 +1,4 @@
-use crate::{connection::encryption::Encryption, frame::FrameFormat};
+use crate::{connection::encryption::FrameEncryption, frame::FrameFormat};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Revision {
@@ -8,8 +8,8 @@ pub enum Revision {
 
 pub trait Established {
     fn format(&self) -> FrameFormat;
-    fn encryption(&self) -> &Encryption;
-    fn encryption_mut(&mut self) -> &mut Encryption;
+    fn encryption(&self) -> &FrameEncryption;
+    fn encryption_mut(&mut self) -> &mut FrameEncryption;
     fn set_revision(&mut self, revision: Revision);
 }
 
@@ -21,25 +21,25 @@ pub struct Inactive {
 #[derive(Debug)]
 pub struct ExchangeHello {
     pub(crate) revision: Revision,
-    pub(crate) encryption: Encryption,
+    pub(crate) encryption: FrameEncryption,
 }
 
 #[derive(Debug)]
 pub struct Authenticating {
     pub(crate) revision: Revision,
-    pub(crate) encryption: Encryption,
+    pub(crate) encryption: FrameEncryption,
 }
 
 #[derive(Debug)]
 pub struct Identifying {
     pub(crate) revision: Revision,
-    pub(crate) encryption: Encryption,
+    pub(crate) encryption: FrameEncryption,
 }
 
 #[derive(Debug)]
 pub struct Active {
     pub(crate) revision: Revision,
-    pub(crate) encryption: Encryption,
+    pub(crate) encryption: FrameEncryption,
 }
 
 macro_rules! established {
@@ -59,11 +59,11 @@ macro_rules! established {
                     self.revision = revision;
                 }
 
-                fn encryption(&self) -> &Encryption {
+                fn encryption(&self) -> &FrameEncryption {
                     &self.encryption
                 }
 
-                fn encryption_mut(&mut self) -> &mut Encryption {
+                fn encryption_mut(&mut self) -> &mut FrameEncryption {
                     &mut self.encryption
                 }
             }

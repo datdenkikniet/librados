@@ -39,8 +39,8 @@ impl<'a> Epilogue<'a> {
         Ok(Self { late_flags, crcs })
     }
 
-    pub fn is_completed(&self, revision: FrameFormat) -> bool {
-        match revision {
+    pub fn is_completed(&self, format: FrameFormat) -> bool {
+        match format {
             FrameFormat::Rev0Crc => self.late_flags & 0x1 == 0x0,
             FrameFormat::Rev1Crc => self.late_flags & 0xF == 0xE,
             FrameFormat::Rev0Secure => todo!(),
