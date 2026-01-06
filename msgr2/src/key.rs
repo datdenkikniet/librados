@@ -1,5 +1,5 @@
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
-use aes_gcm::{Aes128Gcm, KeyInit, aead::AeadMutInPlace};
+use aes_gcm::{AeadCore, AeadInPlace, Aes128Gcm, KeyInit};
 use hmac::{Mac, digest::FixedOutput};
 
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
@@ -103,10 +103,23 @@ impl CryptoKey {
         aes.decrypt_padded_mut::<Pkcs7>(data).ok()
     }
 
-    pub fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut Vec<u8>) -> Option<&'a [u8]> {
-        let mut gcm = Aes128Gcm::new_from_slice(&self.secret).unwrap();
+    pub fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut [u8]) -> Option<&'a [u8]> {
+        use aes::cipher::Unsigned;
+
+        const TAG_SIZE: usize = <Aes128Gcm as AeadCore>::TagSize::USIZE;
+
+        let len_min_tag = data.len().checked_sub(TAG_SIZE)?;
+
+        let (data, tag) = data.split_at_mut(len_min_tag);
+
+        let gcm = Aes128Gcm::new_from_slice(&self.secret).unwrap();
+        // TODO: this is so bad...
         let nonce = (*nonce).into();
-        gcm.decrypt_in_place(&nonce, &[], data).unwrap();
+        let tag: [u8; TAG_SIZE] = tag.try_into().unwrap();
+
+        gcm.decrypt_in_place_detached(&nonce, &[], data, &tag.into())
+            .unwrap();
+
         Some(data)
     }
 }
