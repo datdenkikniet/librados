@@ -20,46 +20,18 @@ const ALGO: crc::Algorithm<u32> = crc::Algorithm {
     residue: 0,
 };
 
+const EMPTY: &'static [u8] = &[];
 const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 #[derive(Debug, Clone)]
-enum VecOrSlice<'a> {
-    Vec(Vec<u8>),
-    Slice(&'a [u8]),
-}
-
-impl core::ops::Deref for VecOrSlice<'_> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            VecOrSlice::Vec(items) => items.as_slice(),
-            VecOrSlice::Slice(items) => items,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Frame<'a> {
-    pub(crate) data: &'a mut Vec<u8>,
-}
-
-impl Frame<'_> {
-    pub fn write(self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        output.write_all(&self.data)?;
-        Ok(self.data.len())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ParsedFrame<'a> {
+pub(crate) struct Frame<'a> {
     format: FrameFormat,
     tag: Tag,
     valid_segments: NonZeroU8,
-    segments: [VecOrSlice<'a>; 4],
+    segments: [&'a [u8]; 4],
 }
 
-impl<'a> ParsedFrame<'a> {
+impl<'a> Frame<'a> {
     pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], format: FrameFormat) -> Option<Self> {
         if segments.len() == 0 || segments.len() > 4 {
             return None;
@@ -67,16 +39,8 @@ impl<'a> ParsedFrame<'a> {
 
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
 
-        let mut segments_out = [
-            VecOrSlice::Slice(&[]),
-            VecOrSlice::Slice(&[]),
-            VecOrSlice::Slice(&[]),
-            VecOrSlice::Slice(&[]),
-        ];
-
-        for (input, output) in segments.iter().zip(segments_out.iter_mut()) {
-            *output = VecOrSlice::Slice(input);
-        }
+        let mut segments_out = [EMPTY; 4];
+        segments_out[..segments.len()].copy_from_slice(segments);
 
         Some(Self {
             format,
@@ -102,7 +66,6 @@ impl<'a> ParsedFrame<'a> {
             segment_count: self.valid_segments,
             segment_details,
             _reserved: 0,
-            inline_data: Vec::new(),
         };
 
         preamble.write(output);
@@ -146,12 +109,10 @@ impl<'a> ParsedFrame<'a> {
         };
     }
 
-    pub fn decode(preamble: &'a mut Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
-        use VecOrSlice::Slice;
-
+    pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
         let mut trailer = data;
 
-        let mut segments = [Slice(&[]), Slice(&[]), Slice(&[]), Slice(&[])];
+        let mut segments = [EMPTY; 4];
         let mut crc_segment1 = None;
 
         fn split_segment<'a>(
@@ -169,28 +130,14 @@ impl<'a> ParsedFrame<'a> {
 
         let segment0 = preamble.segments()[0];
         segments[0] = {
-            let inline_data = preamble.inline_data();
-            let len = if let Some(len) = inline_data.as_ref().map(|v| v.len()) {
-                segment0.len().saturating_sub(len)
-            } else {
-                segment0.len()
-            };
-
-            let (segment, left) = split_segment(trailer, len)?;
+            let (segment, left) = split_segment(trailer, segment0.len())?;
             trailer = left;
-
-            let out = if let Some(mut inline_data) = inline_data {
-                inline_data.extend_from_slice(segment);
-                VecOrSlice::Vec(inline_data)
-            } else {
-                VecOrSlice::Slice(segment)
-            };
 
             if preamble.format == FrameFormat::Rev1Crc {
                 let err = || DecodeError::NotEnoughData {
                     field: Some("crc1"),
                     have: trailer.len(),
-                    need: len,
+                    need: 4,
                 };
 
                 let (crc, left) = trailer.split_first_chunk::<4>().ok_or_else(err)?;
@@ -199,14 +146,13 @@ impl<'a> ParsedFrame<'a> {
                 trailer = left;
             }
 
-            out
+            segment
         };
 
         for (idx, segment) in preamble.segments().iter().enumerate().skip(1) {
             let (segment, left) = split_segment(trailer, segment.len())?;
-
             trailer = left;
-            segments[idx] = VecOrSlice::Slice(segment);
+            segments[idx] = segment;
         }
 
         Self::handle_epilogue(preamble, crc_segment1, &segments, trailer)?;
@@ -222,7 +168,7 @@ impl<'a> ParsedFrame<'a> {
     fn handle_epilogue(
         preamble: &Preamble,
         crc_segment1: Option<u32>,
-        segments: &[VecOrSlice; 4],
+        segments: &[&[u8]; 4],
         trailer: &[u8],
     ) -> Result<(), DecodeError> {
         let mut crcs = [0; 4];

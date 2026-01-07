@@ -1,5 +1,6 @@
 mod config;
 mod encryption;
+mod frame;
 pub mod state;
 
 use state::{
@@ -8,9 +9,13 @@ use state::{
 
 use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityType, Timestamp,
-    connection::{encryption::FrameEncryption, state::Revision},
+    connection::{
+        encryption::FrameEncryption,
+        frame::{Completed, Unstarted},
+        state::Revision,
+    },
     crypto::decode_decrypt_enc_bl,
-    frame::{Frame, ParsedFrame, Preamble, Tag},
+    frame::{Frame, Tag},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -22,6 +27,7 @@ use crate::{
 };
 
 pub use config::*;
+pub use frame::{RxFrame, TxFrame};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {
@@ -118,19 +124,19 @@ impl Connection<Inactive> {
 }
 
 impl Connection<ExchangeHello> {
-    pub fn send_hello(&mut self, hello: &Hello) -> Frame<'_> {
+    pub fn send_hello(&mut self, hello: &Hello) -> TxFrame<'_> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
         let hello = self.buffer.clone();
 
-        let frame = ParsedFrame::new(Tag::Hello, &[&hello], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::Hello, &[&hello], self.state.format()).unwrap();
 
         frame.write(&mut self.state.tx_buf);
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -146,19 +152,19 @@ impl Connection<ExchangeHello> {
 }
 
 impl Connection<Authenticating> {
-    pub fn send_req(&mut self, request: &AuthRequest) -> Frame<'_> {
+    pub fn send_req(&mut self, request: &AuthRequest) -> TxFrame<'_> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
         let request = self.buffer.to_vec();
-        let frame = ParsedFrame::new(Tag::AuthRequest, &[&request], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthRequest, &[&request], self.state.format()).unwrap();
 
         frame.write(&mut self.state.tx_buf);
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -167,7 +173,7 @@ impl Connection<Authenticating> {
         &mut self,
         master_key: &CryptoKey,
         challenge: &AuthReplyMore,
-    ) -> Frame<'_> {
+    ) -> TxFrame<'_> {
         use crate::messages::cephx::*;
 
         let challenge = CephXServerChallenge::decode(&mut challenge.payload.as_slice()).unwrap();
@@ -208,14 +214,14 @@ impl Connection<Authenticating> {
         auth_req_more.encode(&mut self.buffer);
 
         let more = self.buffer.clone();
-        let frame = ParsedFrame::new(Tag::AuthRequestMore, &[&more], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthRequestMore, &[&more], self.state.format()).unwrap();
 
         frame.write(&mut self.state.tx_buf);
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -321,7 +327,7 @@ impl Connection<Authenticating> {
 }
 
 impl Connection<ExchangingSignatures> {
-    pub fn send_signature(&mut self) -> Frame<'_> {
+    pub fn send_signature(&mut self) -> TxFrame<'_> {
         let signature =
             if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
                 session_key.hmac_sha256(&self.state.rx_buf)
@@ -335,13 +341,12 @@ impl Connection<ExchangingSignatures> {
         signature.encode(&mut self.buffer);
 
         let signature = self.buffer.clone();
-        let frame =
-            ParsedFrame::new(Tag::AuthSignature, &[&signature], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthSignature, &[&signature], self.state.format()).unwrap();
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -370,17 +375,17 @@ impl Connection<ExchangingSignatures> {
 }
 
 impl Connection<Identifying> {
-    pub fn send_client_ident(&mut self, ident: &ClientIdent) -> Frame<'_> {
+    pub fn send_client_ident(&mut self, ident: &ClientIdent) -> TxFrame<'_> {
         self.buffer.clear();
         ident.encode(&mut self.buffer);
 
         let ident = self.buffer.clone();
-        let frame = ParsedFrame::new(Tag::ClientIdent, &[&ident], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::ClientIdent, &[&ident], self.state.format()).unwrap();
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -398,24 +403,24 @@ impl Connection<Identifying> {
 }
 
 impl Connection<Active> {
-    pub fn send<'a, M>(&'a mut self, message: M) -> Frame<'a>
+    pub fn send<'a, M>(&'a mut self, message: M) -> TxFrame<'a>
     where
         M: Into<Message>,
     {
         self.send_msg(&message.into())
     }
 
-    pub fn send_msg<'a>(&'a mut self, message: &Message) -> Frame<'a> {
+    pub fn send_msg<'a>(&'a mut self, message: &Message) -> TxFrame<'a> {
         self.buffer.clear();
         message.write_to(&mut self.buffer);
 
         let buffer = self.buffer.clone();
-        let frame = ParsedFrame::new(message.tag(), &[&buffer], self.state.format()).unwrap();
+        let frame = Frame::new(message.tag(), &[&buffer], self.state.format()).unwrap();
 
         self.buffer.clear();
         frame.write(&mut self.buffer);
 
-        Frame {
+        TxFrame {
             data: &mut self.buffer,
         }
     }
@@ -429,55 +434,18 @@ where
         &self.state
     }
 
-    pub fn preamble_len(&self) -> usize {
-        Preamble::len(&self.state.format())
+    pub fn start_rx<'enc, 'buf>(
+        &'enc mut self,
+        buffer: &'buf mut Vec<u8>,
+    ) -> RxFrame<'buf, Unstarted<'enc>> {
+        RxFrame::new(self.state.format(), self.state.encryption_mut(), buffer)
     }
 
-    pub fn recv_preamble(&mut self, preamble_data: &[u8]) -> Result<Preamble, String> {
-        let expected_len = self.preamble_len();
-        if preamble_data.len() != expected_len {
-            return Err(format!(
-                "Expected {} bytes of preamble data, got {}",
-                expected_len,
-                preamble_data.len()
-            ));
-        }
+    pub fn finish_rx(&mut self, frame: RxFrame<'_, Completed>) -> Result<Message, DecodeError> {
+        self.state.recv_data(frame.preamble_data());
+        self.state.recv_data(frame.data());
 
-        self.buffer.clear();
-        self.buffer.extend_from_slice(preamble_data);
-
-        self.state.encryption_mut().decrypt(&mut self.buffer);
-
-        self.state.recv_data(&self.buffer);
-
-        let (preamble, inline_data) = self
-            .buffer
-            .split_first_chunk()
-            .expect("self.preamble_len() >= 32");
-
-        let preamble = Preamble::parse(preamble, self.state.format(), inline_data.to_vec())?;
-
-        Ok(preamble)
-    }
-
-    pub fn recv(
-        &mut self,
-        preamble: &mut Preamble,
-        frame_data: &[u8],
-    ) -> Result<Message, DecodeError> {
-        self.state.recv_data(&frame_data);
-
-        let frame_data = if self.state.encryption().is_secure() && preamble.has_non_inline_data() {
-            self.buffer.clear();
-            self.buffer.copy_from_slice(frame_data);
-            self.state.encryption_mut().decrypt(&mut self.buffer);
-
-            &self.buffer
-        } else {
-            frame_data
-        };
-
-        let frame = ParsedFrame::decode(preamble, frame_data)?;
+        let frame = Frame::decode(&frame.preamble(), frame.data())?;
 
         assert!(
             frame.segments().count() == 1,

@@ -103,7 +103,7 @@ impl CryptoKey {
         aes.decrypt_padded_mut::<Pkcs7>(data).ok()
     }
 
-    pub fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut [u8]) -> Option<&'a [u8]> {
+    pub fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut [u8]) -> Option<&'a mut [u8]> {
         use aes::cipher::Unsigned;
 
         const TAG_SIZE: usize = <Aes128Gcm as AeadCore>::TagSize::USIZE;

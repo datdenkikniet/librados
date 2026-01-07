@@ -2,10 +2,12 @@ mod epilogue;
 mod frame;
 mod preamble;
 
-pub(crate) use frame::ParsedFrame;
+pub(crate) use frame::Frame;
+pub(crate) use preamble::Preamble;
 
-pub use frame::Frame;
-pub use preamble::{Preamble, Tag};
+pub use preamble::Tag;
+
+use crate::key::AES_GCM_SIG_SIZE;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FrameFormat {
@@ -24,10 +26,23 @@ impl FrameFormat {
             FrameFormat::Rev1Secure => false,
         }
     }
+
+    pub fn start_rx_bytes(&self) -> usize {
+        match self {
+            FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+            FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                Preamble::SERIALIZED_SIZE + Preamble::REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
+            }
+        }
+    }
 }
 
 #[test]
 fn valid_frame() {
+    use crate::frame::preamble::Preamble;
+
     let frame_data = &[
         01, 01, 36, 00, 00, 00, 08, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
         00, 00, 00, 00, 00, 63, 189, 107, 06, 01, 01, 01, 01, 28, 00, 00, 00, 02, 00, 00, 00, 00,
@@ -39,7 +54,7 @@ fn valid_frame() {
     let (preamble, frame_data) = frame_data
         .split_first_chunk::<{ Preamble::SERIALIZED_SIZE }>()
         .unwrap();
-    let mut preamble = Preamble::parse(preamble, rev, Vec::new()).unwrap();
+    let mut preamble = Preamble::parse(preamble, rev).unwrap();
 
-    ParsedFrame::decode(&mut preamble, frame_data).expect("Valid frame should be parseable");
+    Frame::decode(&mut preamble, frame_data).expect("Valid frame should be parseable");
 }
