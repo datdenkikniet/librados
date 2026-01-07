@@ -6,41 +6,30 @@ use std::{
 use ceph_protocol::{
     CephFeatureSet, CryptoKey, Decode, EntityAddress, EntityAddressType, EntityName, EntityType,
     Timestamp,
-    connection::{Config, Connection, Message, state::Established},
-    frame::Frame,
+    connection::{Config, Connection, Message, TxFrame, state::Established},
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{AuthMethodCephX, AuthRequest, ConMode},
     },
 };
 
-fn send(frame: Frame<'_>, mut w: &mut impl std::io::Write) {
+fn send(frame: TxFrame<'_>, mut w: &mut impl std::io::Write) {
     println!("Sending: {:?}", frame);
 
     frame.write(&mut w).unwrap();
 }
 
-fn recv<S>(connection: &mut Connection<S>, r: &mut impl std::io::Read) -> Message
+fn recv<S>(connection: &mut Connection<S>, mut r: &mut impl std::io::Read) -> Message
 where
     S: Established,
 {
     let mut buffer = Vec::new();
-    buffer.resize(connection.preamble_len(), 0);
-    r.read_exact(&mut buffer).unwrap();
-    println!("Read {} bytes of preamble data.", buffer.len());
+    let rx_frame = connection.start_rx(&mut buffer);
 
-    if buffer.len() != connection.preamble_len() {
-        unreachable!()
-    }
+    let rx_frame = rx_frame.read_preamble(&mut r).unwrap();
+    let completed = rx_frame.read_rest(&mut r).unwrap();
 
-    let mut preamble = connection.recv_preamble(&buffer).unwrap();
-    buffer.resize(preamble.data_and_epilogue_len(), 0);
-
-    if !buffer.is_empty() {
-        r.read_exact(&mut buffer).unwrap();
-    }
-
-    connection.recv(&mut preamble, &buffer).unwrap()
+    connection.finish_rx(completed).unwrap()
 }
 
 fn main() {

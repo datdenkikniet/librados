@@ -31,16 +31,22 @@ impl FrameEncryption {
         }
     }
 
-    pub fn decrypt(&mut self, buffer: &mut Vec<u8>) {
+    pub fn decrypt<'a>(&mut self, buffer: &'a mut [u8]) -> Option<usize> {
         match &self.inner {
-            EncryptionInner::None => {}
+            EncryptionInner::None => Some(0),
             EncryptionInner::CryptoKey {
                 key,
                 rx_nonce,
                 tx_nonce: _,
             } => {
-                // TODO: increase rx nonce
-                key.decrypt_gcm(&rx_nonce, buffer).unwrap();
+                if !buffer.is_empty() {
+                    // TODO: increase rx nonce
+                    let in_len = buffer.len();
+                    let out_len = key.decrypt_gcm(&rx_nonce, buffer)?.len();
+                    in_len.checked_sub(out_len)
+                } else {
+                    Some(0)
+                }
             }
         }
     }

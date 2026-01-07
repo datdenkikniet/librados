@@ -85,36 +85,24 @@ impl TryFrom<u8> for Tag {
 }
 
 #[derive(Debug)]
-pub struct Preamble {
-    pub(crate) format: FrameFormat,
-    pub(crate) tag: Tag,
-    pub(crate) segment_count: NonZeroU8,
-    pub(crate) segment_details: [SegmentDetail; 4],
-    pub(crate) flags: u8,
-    pub(crate) _reserved: u8,
-    pub(crate) inline_data: Vec<u8>,
+pub(crate) struct Preamble {
+    pub format: FrameFormat,
+    pub tag: Tag,
+    pub segment_count: NonZeroU8,
+    pub segment_details: [SegmentDetail; 4],
+    pub flags: u8,
+    pub _reserved: u8,
 }
 
 impl Preamble {
     pub const SERIALIZED_SIZE: usize = 32;
     pub const REV1_SECURE_INLINE_SIZE: usize = 48;
 
-    pub fn len(format: &FrameFormat) -> usize {
-        match format {
-            crate::frame::FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
-            crate::frame::FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
-            crate::frame::FrameFormat::Rev0Secure => todo!(),
-            crate::frame::FrameFormat::Rev1Secure => {
-                Preamble::SERIALIZED_SIZE + Preamble::REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
-            }
-        }
-    }
-
-    pub fn data_and_epilogue_len(&self) -> usize {
-        let segment_data: usize = self.segments().iter().map(|v| v.len()).sum();
+    pub fn data_and_epilogue_len(&self) -> u64 {
+        let segment_data: u64 = self.segments().iter().map(|v| v.len() as u64).sum();
 
         match self.format {
-            FrameFormat::Rev0Crc => segment_data + Epilogue::SERIALIZED_SIZE_V2_0,
+            FrameFormat::Rev0Crc => segment_data + Epilogue::SERIALIZED_SIZE_V2_0 as u64,
             FrameFormat::Rev1Crc => {
                 let first_segment_crc = if self.segments()[0].len() > 0 { 4 } else { 0 };
                 let epilogue = if self.segments().len() > 1 { 13 } else { 0 };
@@ -134,7 +122,7 @@ impl Preamble {
                 let data_len = first_segment_data_len + other_segments_data_len;
 
                 if data_len > 0 {
-                    data_len + AES_GCM_SIG_SIZE
+                    (data_len + AES_GCM_SIG_SIZE) as u64
                 } else {
                     0
                 }
@@ -168,11 +156,7 @@ impl Preamble {
         output.extend_from_slice(&crc.to_le_bytes());
     }
 
-    pub fn parse(
-        input: &[u8; Self::SERIALIZED_SIZE],
-        format: FrameFormat,
-        mut inline_data: Vec<u8>,
-    ) -> Result<Self, String> {
+    pub fn parse(input: &[u8; Self::SERIALIZED_SIZE], format: FrameFormat) -> Result<Self, String> {
         let (tag_scount, buffer) = input.split_at(2);
 
         let Ok(tag) = Tag::try_from(tag_scount[0]) else {
@@ -210,8 +194,6 @@ impl Preamble {
             ));
         }
 
-        inline_data.truncate(segment_details[0].len());
-
         Ok(Self {
             format,
             tag,
@@ -219,23 +201,11 @@ impl Preamble {
             segment_details,
             flags,
             _reserved,
-            inline_data,
         })
     }
 
     pub(crate) fn segments(&self) -> &[SegmentDetail] {
         &self.segment_details[..self.segment_count.get() as usize]
-    }
-
-    pub fn inline_data(&mut self) -> Option<Vec<u8>> {
-        match self.format {
-            FrameFormat::Rev1Secure => Some(std::mem::take(&mut self.inline_data)),
-            _ => None,
-        }
-    }
-
-    pub fn has_non_inline_data(&self) -> bool {
-        self.data_and_epilogue_len() != 0
     }
 }
 
