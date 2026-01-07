@@ -20,7 +20,7 @@ mod sealed {
     pub trait Sealed {}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Timestamp {
     pub tv_sec: u32,
     pub tv_nsec: u32,

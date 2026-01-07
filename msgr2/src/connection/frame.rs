@@ -2,8 +2,45 @@ use std::io::Read;
 
 use crate::{
     connection::encryption::FrameEncryption,
-    frame::{FrameFormat, Preamble},
+    frame::{Epilogue, FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE},
+    key::AES_GCM_SIG_SIZE,
 };
+
+fn start_rx_bytes(format: FrameFormat) -> usize {
+    match format {
+        FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+        FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
+        FrameFormat::Rev0Secure => todo!(),
+        FrameFormat::Rev1Secure => {
+            Preamble::SERIALIZED_SIZE + REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
+        }
+    }
+}
+
+fn rest_blocks(preamble: &Preamble) -> Vec<usize> {
+    match preamble.format {
+        FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => {
+            preamble.data_and_epilogue_segments().collect()
+        }
+        FrameFormat::Rev0Secure => todo!(),
+        FrameFormat::Rev1Secure => preamble
+            .data_and_epilogue_segments()
+            .map(|v| v + AES_GCM_SIG_SIZE)
+            .collect(),
+    }
+}
+
+#[derive(Debug)]
+pub enum TxError {
+    EncryptionFailed,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for TxError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
 
 #[derive(Debug)]
 pub enum RxError {
@@ -20,18 +57,22 @@ impl From<std::io::Error> for RxError {
     }
 }
 
+#[derive(Debug)]
 pub struct Unstarted<'enc> {
     pub(crate) encryption: &'enc mut FrameEncryption,
 }
 
+#[derive(Debug)]
 pub struct ReadPreamble<'enc> {
     pub(crate) encryption: &'enc mut FrameEncryption,
     pub(crate) preamble: Preamble,
+    // Raw preamble data. Necessary for computing AuthSignature.
     pub(crate) preamble_data: [u8; Preamble::SERIALIZED_SIZE],
-    /// The index up to which data has been "treated" (= decrypted)
-    pub(crate) treated_len: usize,
+    /// The index up to which data has been decrypted.
+    pub(crate) decrypted_len: usize,
 }
 
+#[derive(Debug)]
 pub struct Completed {
     pub(crate) preamble_data: [u8; Preamble::SERIALIZED_SIZE],
     pub(crate) preamble: Preamble,
@@ -41,7 +82,8 @@ pub struct Completed {
 pub struct RxFrame<'buf, T> {
     state: T,
     format: FrameFormat,
-    /// The decrypted frame data
+    /// The decrypted frame data, but still including
+    /// all padding and an optional epilogue.
     frame_data: &'buf mut Vec<u8>,
 }
 
@@ -56,7 +98,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
         // Decrypt incoming data frame
         let tag_len = encryption
             .decrypt(frame_data)
-            .ok_or(RxError::DecryptionFailed)?;
+            .map_err(|_| RxError::DecryptionFailed)?;
 
         // Truncate tag
         let new_len = frame_data.len().checked_sub(tag_len).unwrap();
@@ -82,7 +124,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
                 preamble_data,
                 encryption: encryption,
                 preamble,
-                treated_len: frame_data.len(),
+                decrypted_len: frame_data.len(),
             },
             format,
             frame_data,
@@ -107,10 +149,10 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
         read: impl std::io::Read,
     ) -> Result<RxFrame<'buf, ReadPreamble<'enc>>, RxError> {
         // Read pre data
-        let mut take = read.take(self.format.start_rx_bytes() as u64);
+        let mut take = read.take(start_rx_bytes(self.format) as u64);
         let rx_bytes = take.read_to_end(&mut self.frame_data)?;
 
-        if rx_bytes != self.format.start_rx_bytes() {
+        if rx_bytes != start_rx_bytes(self.format) {
             return Err(RxError::PreambleTruncated);
         }
 
@@ -119,41 +161,48 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
 }
 
 impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
-    fn handle_rest(self) -> Result<RxFrame<'buf, Completed>, RxError> {
+    fn decrypt_block(&mut self) -> Result<(), RxError> {
         let Self {
-            state,
-            format,
-            frame_data,
+            state, frame_data, ..
         } = self;
 
         let tag_len = state
             .encryption
-            .decrypt(&mut frame_data[state.treated_len..])
-            .ok_or(RxError::DecryptionFailed)?;
+            .decrypt(&mut frame_data[state.decrypted_len..])
+            .map_err(|_| RxError::DecryptionFailed)?;
 
         let new_len = frame_data.len().checked_sub(tag_len).unwrap();
         frame_data.truncate(new_len);
+        state.decrypted_len = frame_data.len();
+
+        Ok(())
+    }
+
+    pub fn read_rest(
+        mut self,
+        mut read: impl std::io::Read,
+    ) -> Result<RxFrame<'buf, Completed>, RxError> {
+        let additional_blocks = rest_blocks(&self.state.preamble);
+
+        for block in additional_blocks {
+            let mut take = (&mut read).take(block as u64);
+            let rx_bytes = take.read_to_end(self.frame_data)?;
+
+            if rx_bytes != block {
+                return Err(RxError::FrameDataTruncated);
+            }
+
+            self.decrypt_block()?;
+        }
 
         Ok(RxFrame {
             state: Completed {
-                preamble_data: state.preamble_data,
-                preamble: state.preamble,
+                preamble_data: self.state.preamble_data,
+                preamble: self.state.preamble,
             },
-            format,
-            frame_data,
+            format: self.format,
+            frame_data: self.frame_data,
         })
-    }
-
-    pub fn read_rest(self, read: impl std::io::Read) -> Result<RxFrame<'buf, Completed>, RxError> {
-        let new_data_len = self.state.preamble.data_and_epilogue_len();
-        let mut take = read.take(new_data_len);
-        let rx_bytes = take.read_to_end(self.frame_data)?;
-
-        if rx_bytes as u64 != new_data_len {
-            return Err(RxError::FrameDataTruncated);
-        }
-
-        self.handle_rest()
     }
 }
 
@@ -172,13 +221,63 @@ impl RxFrame<'_, Completed> {
 }
 
 #[derive(Debug)]
-pub struct TxFrame<'a> {
-    pub(crate) data: &'a [u8],
+pub struct TxFrame<'enc_buf> {
+    pub(crate) format: FrameFormat,
+    pub(crate) preamble: Preamble,
+    pub(crate) enc: &'enc_buf mut FrameEncryption,
+    /// The unencrypted frame data (including prologue,
+    /// padding, and epilogue)
+    pub(crate) frame_data: &'enc_buf mut [u8],
 }
 
 impl TxFrame<'_> {
-    pub fn write(self, mut output: impl std::io::Write) -> std::io::Result<usize> {
-        output.write_all(&self.data)?;
-        Ok(self.data.len())
+    pub fn write(self, mut output: impl std::io::Write) -> Result<usize, TxError> {
+        match self.format {
+            FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => {
+                output.write_all(&self.frame_data)?;
+
+                Ok(self.frame_data.len())
+            }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                const LEN: usize = Preamble::SERIALIZED_SIZE + REV1_SECURE_INLINE_SIZE;
+                let mut preamble = [0u8; LEN];
+                let preamble_and_inline_data_len =
+                    Preamble::SERIALIZED_SIZE + self.preamble.segments()[0].len();
+
+                let len = LEN
+                    .min(preamble_and_inline_data_len)
+                    .min(self.frame_data.len());
+
+                let (preamble_data, rest) = self.frame_data.split_at_mut(len);
+
+                preamble[..len].copy_from_slice(preamble_data);
+
+                let tag = self
+                    .enc
+                    .encrypt(preamble.as_mut_slice())
+                    .map_err(|_| TxError::EncryptionFailed)?;
+
+                output.write_all(preamble.as_slice())?;
+                output.write_all(tag.as_slice())?;
+
+                let rest_len = if !rest.is_empty() {
+                    let tag = self
+                        .enc
+                        .encrypt(rest)
+                        .map_err(|_| TxError::EncryptionFailed)?;
+
+                    output.write_all(rest)?;
+                    output.write_all(tag.as_slice())?;
+
+                    tag.len() + rest.len()
+                } else {
+                    0
+                };
+
+                let total = LEN + AES_GCM_SIG_SIZE + rest_len;
+                Ok(total)
+            }
+        }
     }
 }

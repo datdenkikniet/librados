@@ -13,10 +13,9 @@ use ceph_protocol::{
     },
 };
 
-fn send(frame: TxFrame<'_>, mut w: &mut impl std::io::Write) {
-    println!("Sending: {:?}", frame);
-
-    frame.write(&mut w).unwrap();
+fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
+    println!("Sending: {frame:?}");
+    frame.write(w).unwrap();
 }
 
 fn recv<S>(connection: &mut Connection<S>, mut r: &mut impl std::io::Read) -> Message
@@ -26,8 +25,8 @@ where
     let mut buffer = Vec::new();
     let rx_frame = connection.start_rx(&mut buffer);
 
-    let rx_frame = rx_frame.read_preamble(&mut r).unwrap();
-    let completed = rx_frame.read_rest(&mut r).unwrap();
+    let read_preamble = rx_frame.read_preamble(&mut r).unwrap();
+    let completed = read_preamble.read_rest(&mut r).unwrap();
 
     connection.finish_rx(completed).unwrap()
 }
@@ -107,20 +106,18 @@ fn main() {
 
     let mut connection = connection.recv_cephx_done(&master_key, &rx_auth).unwrap();
 
-    let signature = connection.send_signature();
-    send(signature, &mut stream);
-
     println!("Recv signature");
 
     let Message::AuthSignature(rx_sig) = recv(&mut connection, &mut stream) else {
         panic!("Expected AuthSignature, got something else");
     };
 
-    println!("Signature rx: {rx_sig:?}");
+    println!("Received signature was correct. ({rx_sig:?})");
+
+    let signature = connection.send_signature();
+    send(signature, &mut stream);
 
     let mut connection = connection.recv_signature(&rx_sig).unwrap();
-
-    println!("Received signature was correct.");
 
     let target = EntityAddress {
         ty: EntityAddressType::Msgr2,

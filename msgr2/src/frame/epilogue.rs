@@ -7,7 +7,9 @@ pub struct Epilogue<'a> {
 }
 
 impl<'a> Epilogue<'a> {
-    pub const SERIALIZED_SIZE_V2_0: usize = 17;
+    pub const SERIALIZED_SIZE_V2_0_CRC: usize = 17;
+    pub const SERIALIZED_SIZE_V2_1_CRC: usize = 13;
+    pub const SERIALIZED_SIZE_V2_1_SECURE: usize = 16;
 
     pub fn write(&self, output: &mut Vec<u8>) {
         output.push(self.late_flags);

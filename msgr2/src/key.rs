@@ -122,6 +122,16 @@ impl CryptoKey {
 
         Some(data)
     }
+
+    pub fn encrypt_gcm(&self, nonce: &[u8; 12], data: &mut [u8]) -> [u8; 16] {
+        let gcm = Aes128Gcm::new_from_slice(&self.secret).unwrap();
+        let nonce = (*nonce).into();
+
+        // This can only error if the frame is too big: fine by me for now.
+        let tag = gcm.encrypt_in_place_detached(&nonce, &[], data).unwrap();
+
+        tag.into()
+    }
 }
 
 #[test]
