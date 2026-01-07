@@ -50,7 +50,7 @@ impl<'a> Frame<'a> {
         })
     }
 
-    pub fn write(&self, output: &mut Vec<u8>) {
+    pub fn preamble(&self) -> Preamble {
         let mut segment_details = [SegmentDetail::default(); 4];
         for (idx, segment) in self.segments().enumerate() {
             segment_details[idx] = SegmentDetail {
@@ -59,16 +59,20 @@ impl<'a> Frame<'a> {
             };
         }
 
-        let preamble = Preamble {
+        Preamble {
             format: self.format,
             flags: 0,
             tag: self.tag,
             segment_count: self.valid_segments,
             segment_details,
             _reserved: 0,
-        };
+        }
+    }
 
+    pub fn write(&self, output: &mut Vec<u8>) {
+        let preamble = self.preamble();
         preamble.write(output);
+
         let mut crcs = [0u32; 4];
 
         for (idx, segment) in self.segments().enumerate() {
@@ -81,32 +85,7 @@ impl<'a> Frame<'a> {
             }
         }
 
-        match self.format {
-            FrameFormat::Rev0Crc => {
-                let epilogue = Epilogue {
-                    late_flags: 0,
-                    crcs: &crcs,
-                };
-
-                epilogue.write(output);
-            }
-            FrameFormat::Rev1Crc => {
-                let need_epilogue = self.segments().skip(1).any(|v| v.len() > 0);
-
-                if need_epilogue {
-                    let epilogue = Epilogue {
-                        late_flags: 0,
-                        crcs: &crcs[1..],
-                    };
-
-                    epilogue.write(output);
-                }
-            }
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                // TODO: this is quite incorrect xd
-            }
-        };
+        self.write_epilogue(&preamble, crcs, output);
     }
 
     pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
@@ -165,6 +144,36 @@ impl<'a> Frame<'a> {
         })
     }
 
+    fn write_epilogue(&self, preamble: &Preamble, crcs: [u32; 4], output: &mut Vec<u8>) {
+        match self.format {
+            FrameFormat::Rev0Crc => {
+                let epilogue = Epilogue {
+                    late_flags: 0,
+                    crcs: &crcs,
+                };
+
+                epilogue.write(output);
+            }
+            FrameFormat::Rev1Crc => {
+                if preamble.need_epilogue_rev2_1() {
+                    let epilogue = Epilogue {
+                        late_flags: 0,
+                        crcs: &crcs[1..],
+                    };
+
+                    epilogue.write(output);
+                }
+            }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                if preamble.need_epilogue_rev2_1() {
+                    output.push(0xEu8);
+                    output.extend_from_slice(&[0u8; 15]);
+                }
+            }
+        };
+    }
+
     fn handle_epilogue(
         preamble: &Preamble,
         crc_segment1: Option<u32>,
@@ -181,16 +190,21 @@ impl<'a> Frame<'a> {
             FrameFormat::Rev1Crc => {
                 crcs[0] = crc_segment1.unwrap_or(0xFFFF_FFFF);
 
-                if preamble.segments().iter().skip(1).any(|v| v.len() > 0) {
+                if preamble.need_epilogue_rev2_1() {
                     let epilogue = Epilogue::decode(trailer, &mut crcs[1..])?;
                     epilogue.is_completed(preamble.format)
+                } else if !trailer.is_empty() {
+                    return Err(DecodeError::Custom(format!(
+                        "Epilogue should have been empty, but had {} trailing bytes",
+                        trailer.len()
+                    )));
                 } else {
                     true
                 }
             }
             FrameFormat::Rev0Secure => todo!(),
             FrameFormat::Rev1Secure => {
-                if !trailer.is_empty() {
+                if preamble.need_epilogue_rev2_1() {
                     if trailer.len() != 16 {
                         return Err(DecodeError::Custom(format!(
                             "Expected 16 bytes of epilogue data, got {}",
@@ -206,6 +220,11 @@ impl<'a> Frame<'a> {
 
                     let epilogue = Epilogue::decode(&trailer[..1], &mut [])?;
                     epilogue.is_completed(preamble.format)
+                } else if !trailer.is_empty() {
+                    return Err(DecodeError::Custom(format!(
+                        "Epilogue should have been empty, but had {} trailing bytes",
+                        trailer.len()
+                    )));
                 } else {
                     true
                 }

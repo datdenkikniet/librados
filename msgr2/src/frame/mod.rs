@@ -2,12 +2,14 @@ mod epilogue;
 mod frame;
 mod preamble;
 
+pub(crate) use epilogue::Epilogue;
 pub(crate) use frame::Frame;
 pub(crate) use preamble::Preamble;
 
 pub use preamble::Tag;
 
-use crate::key::AES_GCM_SIG_SIZE;
+pub const REV1_SECURE_INLINE_SIZE: usize = 48;
+pub const REV1_SECURE_PAD_SIZE: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FrameFormat {
@@ -24,17 +26,6 @@ impl FrameFormat {
             FrameFormat::Rev1Crc => true,
             FrameFormat::Rev0Secure => false,
             FrameFormat::Rev1Secure => false,
-        }
-    }
-
-    pub fn start_rx_bytes(&self) -> usize {
-        match self {
-            FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
-            FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                Preamble::SERIALIZED_SIZE + Preamble::REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
-            }
         }
     }
 }

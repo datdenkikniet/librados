@@ -1,9 +1,6 @@
 use std::num::NonZeroU8;
 
-use crate::{
-    frame::{FrameFormat, epilogue::Epilogue},
-    key::AES_GCM_SIG_SIZE,
-};
+use crate::frame::{Epilogue, FrameFormat, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE};
 
 /// The algorithm parameters used for the CRC
 /// calculated by Ceph.
@@ -96,39 +93,6 @@ pub(crate) struct Preamble {
 
 impl Preamble {
     pub const SERIALIZED_SIZE: usize = 32;
-    pub const REV1_SECURE_INLINE_SIZE: usize = 48;
-
-    pub fn data_and_epilogue_len(&self) -> u64 {
-        let segment_data: u64 = self.segments().iter().map(|v| v.len() as u64).sum();
-
-        match self.format {
-            FrameFormat::Rev0Crc => segment_data + Epilogue::SERIALIZED_SIZE_V2_0 as u64,
-            FrameFormat::Rev1Crc => {
-                let first_segment_crc = if self.segments()[0].len() > 0 { 4 } else { 0 };
-                let epilogue = if self.segments().len() > 1 { 13 } else { 0 };
-
-                segment_data + first_segment_crc + epilogue
-            }
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                let first_segment_data_len = {
-                    let first_segment_len = self.segments()[0].len();
-                    first_segment_len - (Self::REV1_SECURE_INLINE_SIZE.min(first_segment_len))
-                };
-
-                let other_segments_data_len: usize =
-                    self.segments().iter().skip(1).map(|v| v.len()).sum();
-
-                let data_len = first_segment_data_len + other_segments_data_len;
-
-                if data_len > 0 {
-                    (data_len + AES_GCM_SIG_SIZE) as u64
-                } else {
-                    0
-                }
-            }
-        }
-    }
 
     pub fn write(&self, output: &mut Vec<u8>) {
         output.reserve(Self::SERIALIZED_SIZE);
@@ -204,7 +168,59 @@ impl Preamble {
         })
     }
 
-    pub(crate) fn segments(&self) -> &[SegmentDetail] {
+    pub fn data_and_epilogue_segments(&self) -> impl Iterator<Item = usize> {
+        let expected_data = match self.format {
+            FrameFormat::Rev0Crc => {
+                let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();
+                let data_and_epilogue = total_data_len + Epilogue::SERIALIZED_SIZE_V2_0_CRC;
+
+                [Some(data_and_epilogue), None]
+            }
+            FrameFormat::Rev1Crc => {
+                let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();
+
+                let epilogue_len = if self.need_epilogue_rev2_1() {
+                    4 + Epilogue::SERIALIZED_SIZE_V2_1_CRC
+                } else {
+                    4
+                };
+
+                let data_and_epilogue = total_data_len + epilogue_len;
+                [Some(data_and_epilogue), None]
+            }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                let mut segments = self.segments().iter();
+                let seg1_len = segments.next().unwrap().len();
+
+                // If the first segment is larger than the inline size, we should expect
+                // a new block with the leftover data, with padding.
+                let seg1_block = seg1_len
+                    .checked_sub(REV1_SECURE_INLINE_SIZE)
+                    .map(|seg1_left| seg1_left.next_multiple_of(REV1_SECURE_PAD_SIZE));
+
+                // If there are any follow-up segments, we should expect a single block, with:
+                // 1. Data for each segment, with padding.
+                // 2. An epilogue
+                let other_segs_block = segments
+                    .map(|v| v.len().next_multiple_of(REV1_SECURE_PAD_SIZE))
+                    .fold(None, |v, next| Some(v.unwrap_or(0) + next))
+                    .map(|v| v + Epilogue::SERIALIZED_SIZE_V2_1_SECURE);
+
+                [seg1_block, other_segs_block]
+            }
+        };
+
+        expected_data
+            .into_iter()
+            .filter_map(core::convert::identity)
+    }
+
+    pub fn need_epilogue_rev2_1(&self) -> bool {
+        self.segments().iter().skip(1).any(|v| v.len() > 0)
+    }
+
+    pub fn segments(&self) -> &[SegmentDetail] {
         &self.segment_details[..self.segment_count.get() as usize]
     }
 }

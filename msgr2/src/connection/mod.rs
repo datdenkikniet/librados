@@ -27,7 +27,7 @@ use crate::{
 };
 
 pub use config::*;
-pub use frame::{RxFrame, TxFrame};
+pub use frame::{RxError, RxFrame, TxError, TxFrame};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {
@@ -124,7 +124,7 @@ impl Connection<Inactive> {
 }
 
 impl Connection<ExchangeHello> {
-    pub fn send_hello(&mut self, hello: &Hello) -> TxFrame<'_> {
+    pub fn send_hello<'me>(&'me mut self, hello: &Hello) -> TxFrame<'me> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
         let hello = self.buffer.clone();
@@ -133,12 +133,7 @@ impl Connection<ExchangeHello> {
 
         frame.write(&mut self.state.tx_buf);
 
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
@@ -152,7 +147,7 @@ impl Connection<ExchangeHello> {
 }
 
 impl Connection<Authenticating> {
-    pub fn send_req(&mut self, request: &AuthRequest) -> TxFrame<'_> {
+    pub fn send_req<'me>(&'me mut self, request: &AuthRequest) -> TxFrame<'me> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
 
@@ -161,19 +156,14 @@ impl Connection<Authenticating> {
 
         frame.write(&mut self.state.tx_buf);
 
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 
-    pub fn recv_cephx_server_challenge(
-        &mut self,
+    pub fn recv_cephx_server_challenge<'me>(
+        &'me mut self,
         master_key: &CryptoKey,
         challenge: &AuthReplyMore,
-    ) -> TxFrame<'_> {
+    ) -> TxFrame<'me> {
         use crate::messages::cephx::*;
 
         let challenge = CephXServerChallenge::decode(&mut challenge.payload.as_slice()).unwrap();
@@ -218,12 +208,7 @@ impl Connection<Authenticating> {
 
         frame.write(&mut self.state.tx_buf);
 
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 
     pub fn recv_none_done(
@@ -312,9 +297,10 @@ impl Connection<Authenticating> {
             encryption_key,
         );
 
+        let revision = self.state.revision;
         self.state
             .encryption_mut()
-            .set_secret_data(encryption_key, rx_nonce, tx_nonce);
+            .set_secret_data(revision, encryption_key, rx_nonce, tx_nonce);
 
         Ok(self.with_state(|state| ExchangingSignatures {
             auth_ticket: Some(auth_service_ticket),
@@ -343,12 +329,7 @@ impl Connection<ExchangingSignatures> {
         let signature = self.buffer.clone();
         let frame = Frame::new(Tag::AuthSignature, &[&signature], self.state.format()).unwrap();
 
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 
     pub fn recv_signature(
@@ -382,12 +363,7 @@ impl Connection<Identifying> {
         let ident = self.buffer.clone();
         let frame = Frame::new(Tag::ClientIdent, &[&ident], self.state.format()).unwrap();
 
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 
     #[expect(unused)]
@@ -403,26 +379,20 @@ impl Connection<Identifying> {
 }
 
 impl Connection<Active> {
-    pub fn send<'a, M>(&'a mut self, message: M) -> TxFrame<'a>
+    pub fn send<'me, M>(&'me mut self, message: M) -> TxFrame<'me>
     where
         M: Into<Message>,
     {
         self.send_msg(&message.into())
     }
 
-    pub fn send_msg<'a>(&'a mut self, message: &Message) -> TxFrame<'a> {
+    pub fn send_msg<'me>(&'me mut self, message: &Message) -> TxFrame<'me> {
         self.buffer.clear();
         message.write_to(&mut self.buffer);
 
         let buffer = self.buffer.clone();
         let frame = Frame::new(message.tag(), &[&buffer], self.state.format()).unwrap();
-
-        self.buffer.clear();
-        frame.write(&mut self.buffer);
-
-        TxFrame {
-            data: &mut self.buffer,
-        }
+        self.tx_frame(frame)
     }
 }
 
@@ -432,6 +402,18 @@ where
 {
     pub fn state(&self) -> &T {
         &self.state
+    }
+
+    fn tx_frame<'me>(&'me mut self, frame: Frame<'_>) -> TxFrame<'me> {
+        self.buffer.clear();
+        frame.write(&mut self.buffer);
+
+        TxFrame {
+            preamble: frame.preamble(),
+            format: self.state.format(),
+            enc: self.state.encryption_mut(),
+            frame_data: &mut self.buffer,
+        }
     }
 
     pub fn start_rx<'enc, 'buf>(
