@@ -1,7 +1,10 @@
 use crate::CephFeatureSet;
 
+/// A message indicating that the transmitted `Ident`
+/// does not support enough features to continue communication.
 #[derive(Debug, Clone)]
 pub struct IdentMissingFeatures {
+    /// The missing features.
     pub features: CephFeatureSet,
 }
 

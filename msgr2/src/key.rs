@@ -7,6 +7,8 @@ pub const AES_GCM_SIG_SIZE: usize = 16;
 
 use crate::{Decode, DecodeError, Encode, Timestamp};
 
+/// A cryptographic key.
+// TODO: zeroize...
 pub struct CryptoKey {
     ty: u16,
     created: Timestamp,
@@ -23,6 +25,7 @@ impl core::fmt::Debug for CryptoKey {
     }
 }
 
+// TODO: this should not implement Encode directly...
 impl Encode for CryptoKey {
     fn encode(&self, buffer: &mut Vec<u8>) {
         self.ty.encode(buffer);
@@ -60,6 +63,7 @@ impl Decode<'_> for CryptoKey {
 }
 
 impl CryptoKey {
+    /// Create a new [`CryptoKey`].
     pub fn new(created: Timestamp, secret: [u8; 16]) -> Self {
         Self {
             ty: 1,
@@ -68,14 +72,14 @@ impl CryptoKey {
         }
     }
 
-    pub fn hmac_sha256(&self, buf: &[u8]) -> [u8; 32] {
+    pub(crate) fn hmac_sha256(&self, buf: &[u8]) -> [u8; 32] {
         let mut maybe_expected =
             <hmac::Hmac<sha2::Sha256> as Mac>::new_from_slice(&self.secret).unwrap();
         Mac::update(&mut maybe_expected, buf);
         maybe_expected.finalize_fixed().into()
     }
 
-    pub fn encrypt(&self, data: &mut Vec<u8>) {
+    pub(crate) fn encrypt(&self, data: &mut Vec<u8>) {
         // TODO: this is so bad...
         let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
         let secret = secret.into();
@@ -91,7 +95,7 @@ impl CryptoKey {
         data.truncate(res_len);
     }
 
-    pub fn decrypt<'a>(&self, data: &'a mut [u8]) -> Option<&'a [u8]> {
+    pub(crate) fn decrypt<'a>(&self, data: &'a mut [u8]) -> Option<&'a [u8]> {
         // TODO: this is so bad...
         let secret: [u8; 16] = self.secret.as_slice().try_into().unwrap();
         let secret = secret.into();
@@ -103,7 +107,11 @@ impl CryptoKey {
         aes.decrypt_padded_mut::<Pkcs7>(data).ok()
     }
 
-    pub fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut [u8]) -> Option<&'a mut [u8]> {
+    pub(crate) fn decrypt_gcm<'a>(
+        &self,
+        nonce: &[u8; 12],
+        data: &'a mut [u8],
+    ) -> Option<&'a mut [u8]> {
         use aes::cipher::Unsigned;
 
         const TAG_SIZE: usize = <Aes128Gcm as AeadCore>::TagSize::USIZE;
@@ -123,7 +131,7 @@ impl CryptoKey {
         Some(data)
     }
 
-    pub fn encrypt_gcm(&self, nonce: &[u8; 12], data: &mut [u8]) -> [u8; 16] {
+    pub(crate) fn encrypt_gcm(&self, nonce: &[u8; 12], data: &mut [u8]) -> [u8; 16] {
         let gcm = Aes128Gcm::new_from_slice(&self.secret).unwrap();
         let nonce = (*nonce).into();
 

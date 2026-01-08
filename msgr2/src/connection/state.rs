@@ -1,16 +1,29 @@
+//! The different states that a connection can be in.
+
 use crate::{
     frame::{FrameEncryption, FrameFormat},
     messages::cephx::CephXServiceTicket,
 };
 
+/// The `msgr2` revision a connection has.
 #[derive(Debug, Clone, Copy)]
 pub enum Revision {
+    /// Revision 2.0
     Rev0,
+    /// Revision 2.1
     Rev1,
 }
 
+/// A connection state that is capable of receiving [`RxFrame`][0]s and
+/// transmitting [`TxFrame`][1]s
+///
+/// [0]: crate::frame::RxFrame
+/// [1]: crate::frame::TxFrame
+#[doc(hidden)]
 pub trait Established {
+    /// Get the format of frames exchanged over this connection.
     fn format(&self) -> FrameFormat;
+
     fn encryption(&self) -> &FrameEncryption;
     fn encryption_mut(&mut self) -> &mut FrameEncryption;
     fn set_revision(&mut self, revision: Revision);
@@ -18,6 +31,7 @@ pub trait Established {
     fn recv_data(&mut self, _data: &[u8]) {}
 }
 
+/// An inactive connection.
 #[derive(Debug, Clone)]
 pub struct Inactive {
     pub(crate) _reserved: (),
@@ -25,6 +39,8 @@ pub struct Inactive {
     pub(crate) tx_buf: Vec<u8>,
 }
 
+/// A connection where the server-client pair is exchanging
+/// [`Hello`](crate::messages::Hello) messages.
 #[derive(Debug)]
 pub struct ExchangeHello {
     pub(crate) revision: Revision,
@@ -33,6 +49,8 @@ pub struct ExchangeHello {
     pub(crate) tx_buf: Vec<u8>,
 }
 
+/// A connection that is in the process of authorizing and
+/// authenticating.
 #[derive(Debug)]
 pub struct Authenticating {
     pub(crate) revision: Revision,
@@ -41,6 +59,8 @@ pub struct Authenticating {
     pub(crate) tx_buf: Vec<u8>,
 }
 
+/// A connection that is in the process of exchanging
+/// connection signatures.
 #[derive(Debug)]
 pub struct ExchangingSignatures {
     pub(crate) revision: Revision,
@@ -50,6 +70,9 @@ pub struct ExchangingSignatures {
     pub(crate) auth_ticket: Option<CephXServiceTicket>,
 }
 
+/// A connection where the clien-server pair is exchanging
+/// [`ClientIdent`](crate::messages::ClientIdent) and
+/// [`ServerIdent`](crate::messages::ServerIdent) messages.
 #[derive(Debug)]
 pub struct Identifying {
     pub(crate) revision: Revision,
@@ -57,6 +80,8 @@ pub struct Identifying {
     pub(crate) auth_ticket: Option<CephXServiceTicket>,
 }
 
+/// An active connection, sending and receiving upper-protocol
+/// `Message` data.
 #[derive(Debug)]
 pub struct Active {
     pub(crate) revision: Revision,

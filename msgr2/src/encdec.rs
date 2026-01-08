@@ -92,26 +92,43 @@ macro_rules! write_decode_encode {
     };
 }
 
+/// Errors that can occur while decoding a message.
 #[derive(Debug, Clone)]
 pub enum DecodeError {
+    /// There wasn't enough data available to complete
+    /// the decoding operation.
     NotEnoughData {
+        /// An optional name of the field whose
+        /// decoding failed.
         field: Option<&'static str>,
+        /// The amount of bytes that are available.
         have: usize,
+        /// The amount of bytes that are needed to complete
+        /// the decoding operation.
         need: usize,
     },
+    /// An unexpected version byte was found.
     UnexpectedVersion {
+        /// The name of the type that is being decoded.
         ty: &'static str,
+        /// The version byte that was found.
         got: u8,
+        /// The version range that is supported.
         expected: RangeInclusive<u8>,
     },
+    /// An unknown value (usually for enumerations) was encountered.
     UnknownValue {
+        /// The name of the type that is being decoded.
         ty: &'static str,
+        /// A string representation of the value that was found.
         value: String,
     },
+    /// An error with a custom error message occurred.
     Custom(String),
 }
 
 impl DecodeError {
+    /// Create a [`DecodeError::UnknownValue`].
     pub fn unknown_value<T: core::fmt::Display>(ty: &'static str, value: T) -> Self {
         Self::UnknownValue {
             ty,
@@ -119,6 +136,8 @@ impl DecodeError {
         }
     }
 
+    /// If this [`DecodeError`] has a `field` field in its variant, set its value
+    /// to `field`.
     pub fn for_field(self, field: &'static str) -> Self {
         match self {
             DecodeError::NotEnoughData {
@@ -135,6 +154,7 @@ impl DecodeError {
     }
 }
 
+/// The on-wire representation of a string.
 pub struct WireString<'a>(&'a str);
 
 impl<'a> Decode<'a> for WireString<'a> {
@@ -161,6 +181,12 @@ impl<'a> From<&'a String> for WireString<'a> {
     }
 }
 
+impl<'a> From<&'a str> for WireString<'a> {
+    fn from(value: &'a str) -> Self {
+        Self(value)
+    }
+}
+
 impl TryFrom<WireString<'_>> for String {
     type Error = DecodeError;
 
@@ -169,13 +195,21 @@ impl TryFrom<WireString<'_>> for String {
     }
 }
 
+/// A trait for decoding data from a byte buffer.
 pub trait Decode<'a>: Sized {
+    /// Decodes a `Self` from `buffer` (using the Ceph binary
+    /// representation of `Self`), and updates `buffer` to
+    /// be include the bytes left over after decoding
+    /// completed.
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError>;
 }
 
+/// A trait for encoding data to a `Vec<u8>`.
 pub trait Encode {
+    /// Encode the Ceph binary representation of `Self` into `buffer`.
     fn encode(&self, buffer: &mut Vec<u8>);
 
+    /// Encode `Self` to a `Vec`.
     fn to_vec(&self) -> Vec<u8> {
         let mut vec = Vec::new();
         self.encode(&mut vec);

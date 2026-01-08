@@ -1,5 +1,6 @@
 use crate::messages::MsgrFeatures;
 
+/// The initial connection banner.
 #[derive(Clone, Copy, Debug)]
 pub struct Banner {
     supported_features: MsgrFeatures,
@@ -20,8 +21,10 @@ impl Default for Banner {
 const HEADER: &'static [u8] = b"ceph v2\n";
 
 impl Banner {
+    /// The size (in bytes) of a serialized banner.
     pub const SERIALIZED_SIZE: usize = 26;
 
+    /// Create a new banner.
     pub fn new(supported_features: MsgrFeatures, required_features: MsgrFeatures) -> Self {
         Self {
             supported_features,
@@ -29,6 +32,7 @@ impl Banner {
         }
     }
 
+    /// Parse a banner from the provided buffer.
     pub fn parse(data: &[u8; Self::SERIALIZED_SIZE]) -> Result<Self, String> {
         let (header, data) = data.split_at(10);
 
@@ -60,6 +64,7 @@ impl Banner {
         })
     }
 
+    /// Convert this banner into its serialized form.
     pub fn to_bytes(&self) -> [u8; Self::SERIALIZED_SIZE] {
         let mut output = [0u8; Self::SERIALIZED_SIZE];
         output[..8].copy_from_slice(HEADER);
@@ -69,10 +74,12 @@ impl Banner {
         output
     }
 
+    /// Get the set of supported `msgr2` features.
     pub fn supported(&self) -> &MsgrFeatures {
         &self.supported_features
     }
 
+    /// Get the set of required `msgr2` features.
     pub fn required(&self) -> &MsgrFeatures {
         &self.required_features
     }

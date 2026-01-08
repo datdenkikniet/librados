@@ -1,6 +1,11 @@
+//! A library implementing the [`msgr2`][0] protocol used by [Ceph][1].
+//!
+//! [0]: https://docs.ceph.com/en/quincy/dev/msgr2/
+//! [1]: https://ceph.com/en/
+
 mod ceph_features;
 pub mod connection;
-pub mod crypto;
+mod crypto;
 mod encdec;
 mod entity_address;
 mod entity_name;
@@ -20,9 +25,13 @@ mod sealed {
     pub trait Sealed {}
 }
 
+/// A UTC timestamp.
 #[derive(Default, Debug, Clone)]
 pub struct Timestamp {
+    /// The amount of seconds since the UTC epoch.
     pub tv_sec: u32,
+
+    /// The fractional, nanosecond amount since the UTC epoch.
     pub tv_nsec: u32,
 }
 

@@ -1,3 +1,5 @@
+//! Messages that can be exchanged over a `msgr2` connection.
+
 pub mod auth;
 mod banner;
 pub mod cephx;
@@ -19,18 +21,22 @@ use crate::{Decode, Encode};
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
 
+/// A set of `msgr2` features.
 #[derive(Debug, Clone, Copy)]
 pub struct MsgrFeatures(u64);
 
 impl MsgrFeatures {
+    /// The empty set.
     pub const fn empty() -> Self {
         Self(0)
     }
 
+    /// Whether this feature set indicates revision 2.1 support.
     pub const fn revision_21(&self) -> bool {
         self.0 & FEATURE_REVISION_21 == FEATURE_REVISION_21
     }
 
+    /// Set whether this feature set indicates support for revision 2.1
     pub const fn set_revision_21(&mut self, revision_21: bool) {
         if !revision_21 {
             self.0 &= !FEATURE_REVISION_21;
@@ -39,16 +45,9 @@ impl MsgrFeatures {
         }
     }
 
+    /// Whether this feature set indicates support for compression.
     pub const fn compression(&self) -> bool {
         self.0 & FEATURE_COMPRESSION == FEATURE_COMPRESSION
-    }
-
-    pub fn set_compression(&mut self, compression: bool) {
-        if !compression {
-            self.0 &= !FEATURE_COMPRESSION
-        } else {
-            self.0 |= FEATURE_COMPRESSION
-        }
     }
 }
 
