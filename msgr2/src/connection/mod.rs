@@ -184,10 +184,7 @@ impl Connection<Authenticating> {
             .chain([EntityType::Auth].iter())
             .fold(0u32, |acc, v| acc | u8::from(*v) as u32);
 
-        let old_ticket = self
-            .config
-            .old_ticket()
-            .unwrap_or(CephXTicketBlob::default());
+        let old_ticket = self.config.old_ticket().unwrap_or_default();
 
         let auth = CephXAuthenticate {
             client_challenge,

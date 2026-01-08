@@ -78,7 +78,13 @@ impl<'a> Frame<'a> {
             crcs[idx] = crc;
             output.extend_from_slice(segment);
 
-            if format == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
+            // Apply padding
+            let pad_size = format.segment_pad_size().get();
+            let full_pad_len = segment.len().next_multiple_of(pad_size);
+            let required_padding = full_pad_len - segment.len();
+            output.extend(core::iter::repeat_n(0, required_padding));
+
+            if format == FrameFormat::Rev1Crc && idx == 0 && !segment.is_empty() {
                 output.extend_from_slice(&crc.to_le_bytes());
             }
         }
@@ -107,7 +113,13 @@ impl<'a> Frame<'a> {
 
         let segment0 = preamble.segments()[0];
         segments[0] = {
-            let (segment, left) = split_segment(trailer, segment0.len())?;
+            let padded_len = segment0
+                .len()
+                .next_multiple_of(preamble.format.segment_pad_size().get());
+
+            let (mut segment_data, left) = split_segment(trailer, padded_len)?;
+            // Shorten to drop potential padding
+            segment_data = &segment_data[..segment0.len()];
             trailer = left;
 
             if preamble.format == FrameFormat::Rev1Crc {
@@ -123,7 +135,7 @@ impl<'a> Frame<'a> {
                 trailer = left;
             }
 
-            segment
+            segment_data
         };
 
         for (idx, segment) in preamble.segments().iter().enumerate().skip(1) {
