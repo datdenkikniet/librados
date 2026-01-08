@@ -247,9 +247,10 @@ write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | con
 
 /// A collection of authentication service ticket information.
 #[derive(Debug)]
-pub struct AuthServiceTicketInfos {
-    /// The list of auth service ticket information.
-    pub info_list: Vec<AuthServiceTicketInfo>,
+pub struct AuthServiceTicketReply {
+    /// The service ticket reply containing the ticket for the auth
+    /// service.
+    pub service_ticket_reply: ServiceTicketReply,
     /// Is also: `cbl`
     ///
     /// This value is encrypted using the `session_secret` for the
@@ -262,11 +263,35 @@ pub struct AuthServiceTicketInfos {
     ///
     /// [0]: crate::crypto::decode_decrypt_enc_bl
     pub connection_secret: Vec<u8>,
-    /// Extra data, containing additional tickets.
-    pub extra: Vec<u8>,
+    /// Extra data, containing additionally requested tickets.
+    pub extra_service_tickets: ServiceTicketReply,
 }
 
-write_decode_encode!(AuthServiceTicketInfos = const version 1 as u8 | info_list | connection_secret | extra);
+write_decode_encode!(
+    AuthServiceTicketReply =
+        service_ticket_reply | connection_secret | extra_service_tickets as Vec<u8>
+);
+
+#[derive(Debug)]
+pub struct ServiceTicketReply {
+    pub tickets: Vec<AuthServiceTicketInfo>,
+}
+
+write_decode_encode!(ServiceTicketReply = const version 1 as u8 | tickets);
+
+impl From<&ServiceTicketReply> for Vec<u8> {
+    fn from(value: &ServiceTicketReply) -> Self {
+        value.to_vec()
+    }
+}
+
+impl TryFrom<Vec<u8>> for ServiceTicketReply {
+    type Error = DecodeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Decode::decode(&mut value.as_ref())
+    }
+}
 
 /// Information about an auth service session.
 #[derive(Debug)]

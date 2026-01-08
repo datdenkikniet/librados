@@ -36,7 +36,8 @@ fn main() {
     let master_key = CryptoKey::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
-    let config = Config::new(true);
+    let mut config = Config::new(true);
+    config.request_ticket_for(EntityType::Osd);
     let connection = ceph_protocol::connection::Connection::new(config);
 
     let mut banner = connection.banner().to_bytes();

@@ -19,7 +19,7 @@ use crate::{
         auth::{
             AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
         },
-        cephx::{AuthServiceTicketInfos, CephXMessage, CephXMessageType, CephXServiceTicket},
+        cephx::{AuthServiceTicketReply, CephXMessage, CephXMessageType, CephXServiceTicket},
     },
 };
 
@@ -237,13 +237,13 @@ impl Connection<Authenticating> {
 
         let mut tickets = auth_done.payload();
 
-        let mut service_ticket_infos = AuthServiceTicketInfos::decode(&mut tickets)?;
+        let mut service_ticket_infos = AuthServiceTicketReply::decode(&mut tickets)?;
         assert!(tickets.is_empty());
 
         let mut auth_service_ticket = None;
         let mut auth_connection_secret = None;
 
-        for info in &mut service_ticket_infos.info_list {
+        for info in &mut service_ticket_infos.service_ticket_reply.tickets {
             println!("Ticket entity: {:?}", info.ty);
             println!("Additional ticket data: {:?}", info.refresh_ticket);
 
@@ -264,7 +264,10 @@ impl Connection<Authenticating> {
             }
         }
 
-        // TODO: decode/use extra
+        println!(
+            "Extra service tickets: {:?}",
+            service_ticket_infos.extra_service_tickets
+        );
 
         let Some(auth_service_ticket) = auth_service_ticket.take() else {
             return Err(AuthError::NoAuthTicket);
