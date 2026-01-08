@@ -2,31 +2,16 @@ use std::io::Read;
 
 use crate::{
     connection::encryption::FrameEncryption,
-    frame::{FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE},
+    frame::{FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE},
     key::AES_GCM_SIG_SIZE,
 };
 
-fn start_rx_bytes(format: FrameFormat) -> usize {
+fn start_bytes(format: FrameFormat) -> usize {
     match format {
         FrameFormat::Rev0Crc => crate::frame::Preamble::SERIALIZED_SIZE,
         FrameFormat::Rev1Crc => crate::frame::Preamble::SERIALIZED_SIZE,
         FrameFormat::Rev0Secure => todo!(),
-        FrameFormat::Rev1Secure => {
-            Preamble::SERIALIZED_SIZE + REV1_SECURE_INLINE_SIZE + AES_GCM_SIG_SIZE
-        }
-    }
-}
-
-fn rest_blocks(preamble: &Preamble) -> Vec<usize> {
-    match preamble.format {
-        FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => {
-            preamble.data_and_epilogue_segments().collect()
-        }
-        FrameFormat::Rev0Secure => todo!(),
-        FrameFormat::Rev1Secure => preamble
-            .data_and_epilogue_segments()
-            .map(|v| v + AES_GCM_SIG_SIZE)
-            .collect(),
+        FrameFormat::Rev1Secure => Preamble::SERIALIZED_SIZE + REV1_SECURE_INLINE_SIZE,
     }
 }
 
@@ -114,6 +99,19 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
                 frame_data.copy_within(Preamble::SERIALIZED_SIZE.., 0);
                 let non_trailer_data = preamble.segments()[0].len().min(REV1_SECURE_INLINE_SIZE);
                 frame_data.truncate(non_trailer_data);
+
+                // If there is no more data to be read for the frame, insert artificial
+                // padding data: `crate::frame::Frame` expects (and inserts)
+                // alignment padding for all data, while inlining is only done
+                // by `RxFrame` and `TxFrame`.
+                if frame_data.len() <= REV1_SECURE_INLINE_SIZE {
+                    let padded_len = frame_data
+                        .len()
+                        .next_multiple_of(REV1_SECURE_PAD_SIZE.get());
+                    let pad_required = padded_len - frame_data.len();
+
+                    frame_data.extend(core::iter::repeat_n(0, pad_required));
+                }
             }
         }
 
@@ -146,10 +144,16 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
         read: impl std::io::Read,
     ) -> Result<RxFrame<'buf, ReadPreamble<'enc>>, RxError> {
         // Read pre data
-        let mut take = read.take(start_rx_bytes(self.format) as u64);
+        let start_rx_bytes = match self.format {
+            FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => start_bytes(self.format),
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => start_bytes(self.format) + AES_GCM_SIG_SIZE,
+        };
+
+        let mut take = read.take(start_rx_bytes as u64);
         let rx_bytes = take.read_to_end(&mut self.frame_data)?;
 
-        if rx_bytes != start_rx_bytes(self.format) {
+        if rx_bytes != start_rx_bytes {
             return Err(RxError::PreambleTruncated);
         }
 
@@ -171,6 +175,8 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
         let new_len = frame_data.len().checked_sub(tag_len).unwrap();
         frame_data.truncate(new_len);
 
+        // No need to insert artificial padding here:
+
         Ok(())
     }
 
@@ -178,10 +184,17 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
         mut self,
         mut read: impl std::io::Read,
     ) -> Result<RxFrame<'buf, Completed>, RxError> {
-        let additional_blocks = rest_blocks(&self.state.preamble);
+        let additional_blocks = self.state.preamble.data_and_epilogue_segments();
 
         for block in additional_blocks {
             let new_data_start = self.frame_data.len();
+
+            let block = match self.format {
+                FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => block,
+                FrameFormat::Rev0Secure => todo!(),
+                FrameFormat::Rev1Secure => block + AES_GCM_SIG_SIZE,
+            };
+
             let mut take = (&mut read).take(block as u64);
             let rx_bytes = take.read_to_end(self.frame_data)?;
 
@@ -244,7 +257,7 @@ impl TxFrame<'_> {
                     .min(preamble_and_inline_data_len)
                     .min(self.frame_data.len());
 
-                let (preamble_data, rest) = self.frame_data.split_at_mut(len);
+                let (preamble_data, mut rest) = self.frame_data.split_at_mut(len);
 
                 preamble[..len].copy_from_slice(preamble_data);
 
@@ -256,21 +269,27 @@ impl TxFrame<'_> {
                 output.write_all(preamble.as_slice())?;
                 output.write_all(tag.as_slice())?;
 
-                let rest_len = if !rest.is_empty() {
+                let mut total = LEN + tag.len();
+                let rest_blocks = self.preamble.data_and_epilogue_segments();
+
+                for block in rest_blocks {
+                    let (block, new_rest) = rest
+                        .split_at_mut_checked(block)
+                        .expect("Preamble does not describe frame data.");
+
                     let tag = self
                         .enc
-                        .encrypt(rest)
+                        .encrypt(block)
                         .map_err(|_| TxError::EncryptionFailed)?;
 
-                    output.write_all(rest)?;
+                    output.write_all(block)?;
                     output.write_all(tag.as_slice())?;
 
-                    tag.len() + rest.len()
-                } else {
-                    0
-                };
+                    total += block.len() + AES_GCM_SIG_SIZE;
 
-                let total = LEN + AES_GCM_SIG_SIZE + rest_len;
+                    rest = new_rest;
+                }
+
                 Ok(total)
             }
         }

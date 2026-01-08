@@ -198,7 +198,7 @@ impl Preamble {
         };
     }
 
-    pub fn data_and_epilogue_segments(&self) -> impl Iterator<Item = usize> {
+    pub fn data_and_epilogue_segments<'a>(&self) -> impl Iterator<Item = usize> + 'a {
         let expected_data = match self.format {
             FrameFormat::Rev0Crc => {
                 let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();

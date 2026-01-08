@@ -179,7 +179,6 @@ impl Connection<Authenticating> {
             // other_keys must be non-zero.
             //
             // For now: always request ticket for auth.
-            // TODO: figure out how the auth flow works
             // for non-auth servers.
             .chain([EntityType::Auth].iter())
             .fold(0u32, |acc, v| acc | u8::from(*v) as u32);
