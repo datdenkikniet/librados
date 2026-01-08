@@ -1,5 +1,5 @@
 use crate::{
-    connection::encryption::FrameEncryption, frame::FrameFormat,
+    frame::{FrameEncryption, FrameFormat},
     messages::cephx::CephXServiceTicket,
 };
 

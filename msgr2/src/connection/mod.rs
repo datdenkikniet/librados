@@ -1,6 +1,4 @@
 mod config;
-mod encryption;
-mod frame;
 pub mod state;
 
 use state::{
@@ -9,13 +7,9 @@ use state::{
 
 use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityType, Timestamp,
-    connection::{
-        encryption::FrameEncryption,
-        frame::{Completed, Unstarted},
-        state::Revision,
-    },
+    connection::state::Revision,
     crypto::decode_decrypt_enc_bl,
-    frame::{Frame, Tag},
+    frame::{Completed, Frame, FrameEncryption, RxFrame, Tag, TxFrame, Unstarted},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -27,7 +21,6 @@ use crate::{
 };
 
 pub use config::*;
-pub use frame::{RxError, RxFrame, TxError, TxFrame};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {

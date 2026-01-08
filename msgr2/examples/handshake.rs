@@ -6,7 +6,8 @@ use std::{
 use ceph_protocol::{
     CephFeatureSet, CryptoKey, Decode, EntityAddress, EntityAddressType, EntityName, EntityType,
     Timestamp,
-    connection::{Config, Connection, Message, TxFrame, state::Established},
+    connection::{Config, Connection, Message, state::Established},
+    frame::TxFrame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{AuthMethodCephX, AuthRequest, ConMode},
