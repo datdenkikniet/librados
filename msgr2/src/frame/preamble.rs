@@ -168,6 +168,36 @@ impl Preamble {
         })
     }
 
+    pub fn write_epilogue(&self, crcs: &[u32], output: &mut Vec<u8>) {
+        match self.format {
+            FrameFormat::Rev0Crc => {
+                let epilogue = Epilogue {
+                    late_flags: 0,
+                    crcs,
+                };
+
+                epilogue.write(output);
+            }
+            FrameFormat::Rev1Crc => {
+                if self.need_epilogue_rev2_1() {
+                    let epilogue = Epilogue {
+                        late_flags: 0,
+                        crcs: &crcs[1..],
+                    };
+
+                    epilogue.write(output);
+                }
+            }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                if self.need_epilogue_rev2_1() {
+                    output.push(0xEu8);
+                    output.extend_from_slice(&[0u8; 15]);
+                }
+            }
+        };
+    }
+
     pub fn data_and_epilogue_segments(&self) -> impl Iterator<Item = usize> {
         let expected_data = match self.format {
             FrameFormat::Rev0Crc => {
@@ -197,13 +227,13 @@ impl Preamble {
                 // a new block with the leftover data, with padding.
                 let seg1_block = seg1_len
                     .checked_sub(REV1_SECURE_INLINE_SIZE)
-                    .map(|seg1_left| seg1_left.next_multiple_of(REV1_SECURE_PAD_SIZE));
+                    .map(|seg1_left| seg1_left.next_multiple_of(REV1_SECURE_PAD_SIZE.get()));
 
                 // If there are any follow-up segments, we should expect a single block, with:
                 // 1. Data for each segment, with padding.
                 // 2. An epilogue
                 let other_segs_block = segments
-                    .map(|v| v.len().next_multiple_of(REV1_SECURE_PAD_SIZE))
+                    .map(|v| v.len().next_multiple_of(REV1_SECURE_PAD_SIZE.get()))
                     .fold(None, |v, next| Some(v.unwrap_or(0) + next))
                     .map(|v| v + Epilogue::SERIALIZED_SIZE_V2_1_SECURE);
 
@@ -211,9 +241,7 @@ impl Preamble {
             }
         };
 
-        expected_data
-            .into_iter()
-            .filter_map(core::convert::identity)
+        expected_data.into_iter().flatten()
     }
 
     pub fn need_epilogue_rev2_1(&self) -> bool {

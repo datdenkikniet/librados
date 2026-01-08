@@ -129,9 +129,9 @@ impl Connection<ExchangeHello> {
         hello.encode(&mut self.buffer);
         let hello = self.buffer.clone();
 
-        let frame = Frame::new(Tag::Hello, &[&hello], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::Hello, &[&hello]).unwrap();
 
-        frame.write(&mut self.state.tx_buf);
+        frame.write(self.state.format(), &mut self.state.tx_buf);
 
         self.tx_frame(frame)
     }
@@ -152,9 +152,9 @@ impl Connection<Authenticating> {
         request.encode(&mut self.buffer);
 
         let request = self.buffer.to_vec();
-        let frame = Frame::new(Tag::AuthRequest, &[&request], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthRequest, &[&request]).unwrap();
 
-        frame.write(&mut self.state.tx_buf);
+        frame.write(self.state.format(), &mut self.state.tx_buf);
 
         self.tx_frame(frame)
     }
@@ -204,9 +204,9 @@ impl Connection<Authenticating> {
         auth_req_more.encode(&mut self.buffer);
 
         let more = self.buffer.clone();
-        let frame = Frame::new(Tag::AuthRequestMore, &[&more], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthRequestMore, &[&more]).unwrap();
 
-        frame.write(&mut self.state.tx_buf);
+        frame.write(self.state.format(), &mut self.state.tx_buf);
 
         self.tx_frame(frame)
     }
@@ -327,7 +327,7 @@ impl Connection<ExchangingSignatures> {
         signature.encode(&mut self.buffer);
 
         let signature = self.buffer.clone();
-        let frame = Frame::new(Tag::AuthSignature, &[&signature], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::AuthSignature, &[&signature]).unwrap();
 
         self.tx_frame(frame)
     }
@@ -361,7 +361,7 @@ impl Connection<Identifying> {
         ident.encode(&mut self.buffer);
 
         let ident = self.buffer.clone();
-        let frame = Frame::new(Tag::ClientIdent, &[&ident], self.state.format()).unwrap();
+        let frame = Frame::new(Tag::ClientIdent, &[&ident]).unwrap();
 
         self.tx_frame(frame)
     }
@@ -391,7 +391,7 @@ impl Connection<Active> {
         message.write_to(&mut self.buffer);
 
         let buffer = self.buffer.clone();
-        let frame = Frame::new(message.tag(), &[&buffer], self.state.format()).unwrap();
+        let frame = Frame::new(message.tag(), &[&buffer]).unwrap();
         self.tx_frame(frame)
     }
 }
@@ -406,11 +406,10 @@ where
 
     fn tx_frame<'me>(&'me mut self, frame: Frame<'_>) -> TxFrame<'me> {
         self.buffer.clear();
-        frame.write(&mut self.buffer);
+        frame.write(self.state.format(), &mut self.buffer);
 
         TxFrame {
-            preamble: frame.preamble(),
-            format: self.state.format(),
+            preamble: frame.preamble(self.state.format()),
             enc: self.state.encryption_mut(),
             frame_data: &mut self.buffer,
         }
@@ -434,10 +433,7 @@ where
             "Multi-segment frames not supported yet."
         );
 
-        Ok(Message::decode(
-            frame.tag(),
-            frame.segments().next().unwrap(),
-        )?)
+        Message::decode(frame.tag(), frame.segments().next().unwrap())
     }
 }
 
