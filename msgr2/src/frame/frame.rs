@@ -25,15 +25,14 @@ const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 #[derive(Debug, Clone)]
 pub(crate) struct Frame<'a> {
-    format: FrameFormat,
     tag: Tag,
     valid_segments: NonZeroU8,
     segments: [&'a [u8]; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]], format: FrameFormat) -> Option<Self> {
-        if segments.len() == 0 || segments.len() > 4 {
+    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]]) -> Option<Self> {
+        if segments.is_empty() || segments.len() > 4 {
             return None;
         }
 
@@ -43,14 +42,13 @@ impl<'a> Frame<'a> {
         segments_out[..segments.len()].copy_from_slice(segments);
 
         Some(Self {
-            format,
             tag,
             valid_segments,
             segments: segments_out,
         })
     }
 
-    pub fn preamble(&self) -> Preamble {
+    pub fn preamble(&self, format: FrameFormat) -> Preamble {
         let mut segment_details = [SegmentDetail::default(); 4];
         for (idx, segment) in self.segments().enumerate() {
             segment_details[idx] = SegmentDetail {
@@ -60,7 +58,7 @@ impl<'a> Frame<'a> {
         }
 
         Preamble {
-            format: self.format,
+            format,
             flags: 0,
             tag: self.tag,
             segment_count: self.valid_segments,
@@ -69,8 +67,8 @@ impl<'a> Frame<'a> {
         }
     }
 
-    pub fn write(&self, output: &mut Vec<u8>) {
-        let preamble = self.preamble();
+    pub fn write(&self, format: FrameFormat, output: &mut Vec<u8>) {
+        let preamble = self.preamble(format);
         preamble.write(output);
 
         let mut crcs = [0u32; 4];
@@ -80,12 +78,12 @@ impl<'a> Frame<'a> {
             crcs[idx] = crc;
             output.extend_from_slice(segment);
 
-            if self.format == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
+            if format == FrameFormat::Rev1Crc && idx == 0 && segment.len() > 0 {
                 output.extend_from_slice(&crc.to_le_bytes());
             }
         }
 
-        self.write_epilogue(&preamble, crcs, output);
+        preamble.write_epilogue(crcs.as_slice(), output);
     }
 
     pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
@@ -129,49 +127,24 @@ impl<'a> Frame<'a> {
         };
 
         for (idx, segment) in preamble.segments().iter().enumerate().skip(1) {
-            let (segment, left) = split_segment(trailer, segment.len())?;
+            let padded_len = segment0
+                .len()
+                .next_multiple_of(preamble.format.segment_pad_size().get());
+
+            let (segment_data, left) = split_segment(trailer, padded_len)?;
+
+            // Shorten to drop potential padding
+            segments[idx] = &segment_data[..segment.len()];
             trailer = left;
-            segments[idx] = segment;
         }
 
         Self::handle_epilogue(preamble, crc_segment1, &segments, trailer)?;
 
         Ok(Self {
-            format: preamble.format,
             tag: preamble.tag,
             valid_segments: preamble.segment_count,
             segments,
         })
-    }
-
-    fn write_epilogue(&self, preamble: &Preamble, crcs: [u32; 4], output: &mut Vec<u8>) {
-        match self.format {
-            FrameFormat::Rev0Crc => {
-                let epilogue = Epilogue {
-                    late_flags: 0,
-                    crcs: &crcs,
-                };
-
-                epilogue.write(output);
-            }
-            FrameFormat::Rev1Crc => {
-                if preamble.need_epilogue_rev2_1() {
-                    let epilogue = Epilogue {
-                        late_flags: 0,
-                        crcs: &crcs[1..],
-                    };
-
-                    epilogue.write(output);
-                }
-            }
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                if preamble.need_epilogue_rev2_1() {
-                    output.push(0xEu8);
-                    output.extend_from_slice(&[0u8; 15]);
-                }
-            }
-        };
     }
 
     fn handle_epilogue(

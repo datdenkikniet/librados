@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::{
     connection::encryption::FrameEncryption,
-    frame::{Epilogue, FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE},
+    frame::{FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE},
     key::AES_GCM_SIG_SIZE,
 };
 
@@ -222,7 +222,6 @@ impl RxFrame<'_, Completed> {
 
 #[derive(Debug)]
 pub struct TxFrame<'enc_buf> {
-    pub(crate) format: FrameFormat,
     pub(crate) preamble: Preamble,
     pub(crate) enc: &'enc_buf mut FrameEncryption,
     /// The unencrypted frame data (including prologue,
@@ -232,10 +231,9 @@ pub struct TxFrame<'enc_buf> {
 
 impl TxFrame<'_> {
     pub fn write(self, mut output: impl std::io::Write) -> Result<usize, TxError> {
-        match self.format {
+        match self.preamble.format {
             FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => {
-                output.write_all(&self.frame_data)?;
-
+                output.write_all(self.frame_data)?;
                 Ok(self.frame_data.len())
             }
             FrameFormat::Rev0Secure => todo!(),

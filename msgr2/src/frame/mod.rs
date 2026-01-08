@@ -2,6 +2,8 @@ mod epilogue;
 mod frame;
 mod preamble;
 
+use std::num::NonZeroUsize;
+
 pub(crate) use epilogue::Epilogue;
 pub(crate) use frame::Frame;
 pub(crate) use preamble::Preamble;
@@ -9,7 +11,7 @@ pub(crate) use preamble::Preamble;
 pub use preamble::Tag;
 
 pub const REV1_SECURE_INLINE_SIZE: usize = 48;
-pub const REV1_SECURE_PAD_SIZE: usize = 16;
+pub const REV1_SECURE_PAD_SIZE: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FrameFormat {
@@ -26,6 +28,14 @@ impl FrameFormat {
             FrameFormat::Rev1Crc => true,
             FrameFormat::Rev0Secure => false,
             FrameFormat::Rev1Secure => false,
+        }
+    }
+
+    pub const fn segment_pad_size(&self) -> NonZeroUsize {
+        match self {
+            FrameFormat::Rev0Crc | FrameFormat::Rev1Crc => NonZeroUsize::new(1).unwrap(),
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => REV1_SECURE_PAD_SIZE,
         }
     }
 }
