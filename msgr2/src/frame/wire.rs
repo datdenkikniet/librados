@@ -1,8 +1,10 @@
 use std::io::Read;
 
 use crate::{
-    connection::encryption::FrameEncryption,
-    frame::{FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE},
+    frame::{
+        FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE,
+        encryption::FrameEncryption,
+    },
     key::AES_GCM_SIG_SIZE,
 };
 

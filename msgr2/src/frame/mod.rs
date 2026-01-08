@@ -1,14 +1,20 @@
+mod encryption;
 mod epilogue;
 mod frame;
 mod preamble;
+mod wire;
 
 use std::num::NonZeroUsize;
 
+pub(crate) use encryption::FrameEncryption;
 pub(crate) use epilogue::Epilogue;
 pub(crate) use frame::Frame;
 pub(crate) use preamble::Preamble;
 
 pub use preamble::Tag;
+
+pub use encryption::{DecryptError, EncryptError};
+pub use wire::{Completed, ReadPreamble, RxError, RxFrame, TxError, TxFrame, Unstarted};
 
 pub const REV1_SECURE_INLINE_SIZE: usize = 48;
 pub const REV1_SECURE_PAD_SIZE: NonZeroUsize = NonZeroUsize::new(16).unwrap();
