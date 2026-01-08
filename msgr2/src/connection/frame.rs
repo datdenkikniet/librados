@@ -68,8 +68,6 @@ pub struct ReadPreamble<'enc> {
     pub(crate) preamble: Preamble,
     // Raw preamble data. Necessary for computing AuthSignature.
     pub(crate) preamble_data: [u8; Preamble::SERIALIZED_SIZE],
-    /// The index up to which data has been decrypted.
-    pub(crate) decrypted_len: usize,
 }
 
 #[derive(Debug)]
@@ -114,7 +112,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
             crate::frame::FrameFormat::Rev0Secure => todo!(),
             crate::frame::FrameFormat::Rev1Secure => {
                 frame_data.copy_within(Preamble::SERIALIZED_SIZE.., 0);
-                let non_trailer_data = preamble.segments()[0].len();
+                let non_trailer_data = preamble.segments()[0].len().min(REV1_SECURE_INLINE_SIZE);
                 frame_data.truncate(non_trailer_data);
             }
         }
@@ -124,7 +122,6 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
                 preamble_data,
                 encryption: encryption,
                 preamble,
-                decrypted_len: frame_data.len(),
             },
             format,
             frame_data,
@@ -161,19 +158,18 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
 }
 
 impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
-    fn decrypt_block(&mut self) -> Result<(), RxError> {
+    fn decrypt_block(&mut self, new_data_start: usize) -> Result<(), RxError> {
         let Self {
             state, frame_data, ..
         } = self;
 
         let tag_len = state
             .encryption
-            .decrypt(&mut frame_data[state.decrypted_len..])
+            .decrypt(&mut frame_data[new_data_start..])
             .map_err(|_| RxError::DecryptionFailed)?;
 
         let new_len = frame_data.len().checked_sub(tag_len).unwrap();
         frame_data.truncate(new_len);
-        state.decrypted_len = frame_data.len();
 
         Ok(())
     }
@@ -185,6 +181,7 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
         let additional_blocks = rest_blocks(&self.state.preamble);
 
         for block in additional_blocks {
+            let new_data_start = self.frame_data.len();
             let mut take = (&mut read).take(block as u64);
             let rx_bytes = take.read_to_end(self.frame_data)?;
 
@@ -192,7 +189,7 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
                 return Err(RxError::FrameDataTruncated);
             }
 
-            self.decrypt_block()?;
+            self.decrypt_block(new_data_start)?;
         }
 
         Ok(RxFrame {
