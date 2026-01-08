@@ -3,10 +3,14 @@ use crate::{
     messages::auth::{AuthMethod, ConMode},
 };
 
+/// An authentication request payload.
 pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {
+    /// The authentication method for which this payload
+    /// can be used.
     const METHOD: AuthMethod;
 }
 
+/// An authentication request.
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
     method: AuthMethod,
@@ -15,13 +19,14 @@ pub struct AuthRequest {
 }
 
 impl AuthRequest {
-    pub fn new<T>(auth_method: T, preferred_modes: Vec<ConMode>) -> Self
+    /// Create a new authentication request for the provided method.
+    pub fn new<T>(auth_method: T) -> Self
     where
         T: AuthRequestPayload,
     {
         Self {
             method: T::METHOD,
-            preferred_modes,
+            preferred_modes: vec![ConMode::Crc, ConMode::Secure],
             auth_payload: auth_method.to_vec(),
         }
     }
@@ -29,9 +34,12 @@ impl AuthRequest {
 
 write_decode_encode!(AuthRequest = method | preferred_modes | auth_payload);
 
+/// No authentication.
 #[derive(Debug, Clone)]
 pub struct AuthMethodNone {
+    /// The name of the authenticating entity.
     pub name: EntityName,
+    /// The requested global ID.
     pub global_id: u64,
 }
 
@@ -43,12 +51,15 @@ impl AuthRequestPayload for AuthMethodNone {
     const METHOD: AuthMethod = AuthMethod::None;
 }
 
-/// As encoded in `MonClient.cc` -> `MonConnection::get_auth_request`.
-///
-/// See: `Monitor::handle_auth_request`
+/// The CephX authentication method.
+// As encoded in `MonClient.cc` -> `MonConnection::get_auth_request`.
+//
+// See: `Monitor::handle_auth_request`
 #[derive(Debug)]
 pub struct AuthMethodCephX {
+    /// The name of the authenticating entity.
     pub name: EntityName,
+    /// The requested global ID.
     pub global_id: u64,
 }
 
@@ -60,8 +71,10 @@ impl AuthRequestPayload for AuthMethodCephX {
     const METHOD: AuthMethod = AuthMethod::CephX;
 }
 
+/// Additional data in an authentication request.
 #[derive(Debug, Clone)]
 pub struct AuthRequestMore {
+    /// The payload of the message.
     pub payload: Vec<u8>,
 }
 

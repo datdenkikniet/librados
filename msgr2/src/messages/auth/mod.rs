@@ -1,3 +1,6 @@
+//! Types relevant to messages exchanged during the authentication and
+//! authorization phase of a connection.
+
 mod bad_method;
 mod done;
 mod reply_more;
@@ -14,11 +17,18 @@ pub use signature::AuthSignature;
 
 use crate::{Decode, DecodeError, Encode};
 
+/// An authentication method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMethod {
+    /// Unknown.
     Unknown = 0,
+    /// No authentication.
     None = 1,
+    /// [CephX] authentication.
+    ///
+    /// [CephX]: https://docs.ceph.com/en/latest/dev/cephx/
     CephX = 2,
+    /// GSS authentication (unsupported).
     Gss = 4,
 }
 
@@ -63,10 +73,14 @@ impl Decode<'_> for AuthMethod {
     }
 }
 
+/// A connection mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConMode {
+    /// Unknown.
     Unknown = 0,
+    /// Checksum-based connection.
     Crc = 1,
+    /// A secured connection.
     Secure = 2,
 }
 

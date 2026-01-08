@@ -4,10 +4,14 @@ use nix::libc::{AF_INET, AF_INET6};
 
 use crate::{Decode, DecodeError, Encode};
 
+/// An entity address.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityAddress {
+    /// The type of the entity address.
     pub ty: EntityAddressType,
+    /// A nonce associated with the entity.
     pub nonce: u32,
+    /// The socket address of the entity.
     pub address: Option<SocketAddr>,
 }
 
@@ -130,6 +134,7 @@ impl Decode<'_> for EntityAddress {
 /// to (at the communication level).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
+#[expect(missing_docs)]
 pub enum EntityAddressType {
     None = 0,
     Legacy = 1,

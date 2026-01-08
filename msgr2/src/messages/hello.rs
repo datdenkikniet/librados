@@ -1,11 +1,16 @@
 use crate::{Decode, DecodeError, Encode, EntityType, entity_address::EntityAddress};
 
+/// A basic hello message, relaying information about
+/// the entity that sends it.
 #[derive(Debug, Clone)]
 pub struct Hello {
-    /// The type of entity we are communicating with.
+    /// The type of the entity.
     pub entity_type: EntityType,
-    /// The peer address that the entity we are communicating
-    /// with observes us to have.
+    /// The address of the peer the entity is communicating
+    /// with.
+    ///
+    /// This is the address of the peer, i.e. the address of
+    /// the `mon` or `osd` that the entity is talking to.
     pub peer_address: EntityAddress,
 }
 

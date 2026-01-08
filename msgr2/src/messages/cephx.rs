@@ -1,34 +1,50 @@
+//! CephX messages.
+
 use crate::{
     CryptoKey, Decode, DecodeError, Encode, EntityName, EntityType, Timestamp,
     crypto::encode_encrypt,
 };
 
+/// A CephX ticket blob.
 #[derive(Debug, Clone, Default)]
 pub struct CephXTicketBlob {
+    /// The ID of the secret described by this blob.
     pub secret_id: u64,
+    /// A ticket blob. This blob generally consists of
+    /// the encoded-and-encrypted version of a [`CephXServiceTicket`].
     pub blob: Vec<u8>,
 }
 
 write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
+/// A CephX service ticket.
 #[derive(Debug)]
 pub struct CephXServiceTicket {
+    /// The session key used for this ticket.
     pub session_key: CryptoKey,
+    /// The duration for which this ticket is valid.
     pub validity: Timestamp,
 }
 
 write_decode_encode!(CephXServiceTicket = const version 1 as u8 | session_key | validity);
 
+/// Service ticket information.
 #[derive(Debug)]
-pub struct CephXServiceTicketInfo {
+#[expect(unused)]
+struct CephXServiceTicketInfo {
+    /// The authentication ticket associated with this
+    /// information.
     pub auth_ticket: AuthTicket,
+    /// The session key used for this ticket.
     pub session_key: CryptoKey,
 }
 
 write_decode_encode!(CephXServiceTicketInfo = const version 1 as u8 | auth_ticket | session_key);
 
+/// The type of a CephX message.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u16)]
+#[expect(missing_docs)]
 pub enum CephXMessageType {
     GetAuthSessionKey = 0x0100,
     GetPrincipalSessionKey = 0x0200,
@@ -58,17 +74,24 @@ impl TryFrom<u16> for CephXMessageType {
     }
 }
 
+/// A CephX response header.
 #[derive(Debug, Clone)]
 pub struct CephXResponseHeader {
+    /// The type of the message.
     pub ty: CephXMessageType,
+    /// The status of the message (non-zero corresponds to an error).
     pub status: u32,
 }
 
 write_decode_encode!(CephXResponseHeader = ty as u16 | status);
 
+/// A CephX message.
 #[derive(Debug)]
 pub struct CephXMessage {
+    /// The type of the message.
     ty: CephXMessageType,
+    /// The payload of the message, containing type-specific
+    /// data.
     payload: Vec<u8>,
 }
 
@@ -80,6 +103,8 @@ impl Encode for CephXMessage {
 }
 
 impl CephXMessage {
+    /// Create a new CephX message, with the given `value`
+    /// as its payload.
     pub fn new<T>(ty: CephXMessageType, value: T) -> Self
     where
         T: Encode,
@@ -90,10 +115,12 @@ impl CephXMessage {
         }
     }
 
+    /// Get the type of the message.
     pub fn ty(&self) -> CephXMessageType {
         self.ty
     }
 
+    /// Get the payload of the message.
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
@@ -116,6 +143,7 @@ impl Decode<'_> for CephXMessage {
     }
 }
 
+/// A CephX authentication key.
 #[derive(Debug, Clone, Copy)]
 pub struct CephXAuthenticateKey(u64);
 
@@ -134,6 +162,13 @@ impl TryFrom<u64> for CephXAuthenticateKey {
 }
 
 impl CephXAuthenticateKey {
+    /// Compute a [`CephXAuthenticateKey`] based on the
+    /// provided `server_challenge`, `client_challenge`, and
+    /// `key`.
+    ///
+    /// This `key` is generally the key that can be found in
+    /// a `ceph.keyring`, i.e. the shared secret between you
+    /// and the server you are (attempting to) communicate with.
     pub fn compute(
         server_challenge: u64,
         client_challenge: u64,
@@ -171,11 +206,18 @@ impl CephXAuthenticateKey {
     }
 }
 
+/// A CephX authenticate message.
 #[derive(Debug)]
 pub struct CephXAuthenticate {
+    /// The client challenge value.
     pub client_challenge: u64,
+    /// The authentication key associated with this connection,
+    /// computed using this message's `client_challenge`.
     pub key: CephXAuthenticateKey,
+    /// An optional old ticket.
     pub old_ticket: CephXTicketBlob,
+    /// Other keys to request, i.e. a bitmask of the
+    /// desired [`EntityType`]s.
     // TODO: enum
     pub other_keys: u32,
 }
@@ -183,7 +225,7 @@ pub struct CephXAuthenticate {
 write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys);
 
 #[derive(Debug)]
-pub struct AuthCapsInfo {
+struct AuthCapsInfo {
     pub allow_all: bool,
     pub caps: Vec<u8>,
 }
@@ -191,7 +233,7 @@ pub struct AuthCapsInfo {
 write_decode_encode!(AuthCapsInfo = const version 1 as u8 | allow_all | caps);
 
 #[derive(Debug)]
-pub struct AuthTicket {
+struct AuthTicket {
     pub name: EntityName,
     pub global_id: u64,
     pub created: Timestamp,
@@ -203,57 +245,59 @@ pub struct AuthTicket {
 
 write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | const 0xFFFF_FFFF_FFFF_FFFFu64 as u64 | created | expires | caps | flags);
 
+/// A collection of authentication service ticket information.
 #[derive(Debug)]
 pub struct AuthServiceTicketInfos {
+    /// The list of auth service ticket information.
     pub info_list: Vec<AuthServiceTicketInfo>,
     /// Is also: `cbl`
     ///
-    /// In the end, this is a Vec<u8> (with length indicator),
-    /// where the contained data makes up an encrypted Vec<u8>
-    /// (with length indicator and auth info). So, to decode it,
-    /// you must first decode it as a `[u8]`, and then [`decode_decrypt_enc_bl`][0]
-    /// that value.
+    /// This value is encrypted using the `session_secret` for the
+    /// contacted service, as found in `info_list`.
+    ///
+    /// In the end, this is an encoded `Vec<u8>` whose data makes
+    /// up an encoded and encrypted `Vec<u8>` (with length indicator
+    /// and auth info). So, to decode it, you must first decode it as
+    /// a `[u8]`, and then [`decode_decrypt_enc_bl`][0] that value.
     ///
     /// [0]: crate::crypto::decode_decrypt_enc_bl
     pub connection_secret: Vec<u8>,
+    /// Extra data, containing additional tickets.
     pub extra: Vec<u8>,
 }
 
 write_decode_encode!(AuthServiceTicketInfos = const version 1 as u8 | info_list | connection_secret | extra);
 
+/// Information about an auth service session.
 #[derive(Debug)]
 pub struct AuthServiceTicketInfo {
-    pub service_id: EntityType,
+    /// The entity type for which this service ticket is
+    /// valid.
+    ///
+    /// In the Ceph code base, this is called `service_id`.
+    pub ty: EntityType,
+    /// The encrypted session ticket associated with this auth
+    /// ticket.
+    ///
+    /// The encryption is generally the key that can be found in
+    /// a `ceph.keyring`, i.e. the shared secret between you
+    /// and the server you are (attempting to) communicate with.
     pub encrypted_session_ticket: Vec<u8>,
+    /// The refresh ticket for the auth service.
     pub refresh_ticket: MaybeEncryptedCephXTicketBlob,
 }
 
 write_decode_encode!(
-    AuthServiceTicketInfo = service_id as u32 | const version 1 as u8 | encrypted_session_ticket | refresh_ticket
+    AuthServiceTicketInfo = ty as u32 | const version 1 as u8 | encrypted_session_ticket | refresh_ticket
 );
 
+/// A potentially encrypted CephX ticket blob.
 #[derive(Debug)]
 pub enum MaybeEncryptedCephXTicketBlob {
+    /// An unencrypted CephX ticket blob.
     Unencrypted(CephXTicketBlob),
+    /// An encrypted CephX ticket blob.
     Encrypted(Vec<u8>),
-}
-
-impl MaybeEncryptedCephXTicketBlob {
-    pub fn as_unencrypted(&self) -> Option<&CephXTicketBlob> {
-        if let Self::Unencrypted(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_unencrypted_mut(&mut self) -> Option<&mut CephXTicketBlob> {
-        if let Self::Unencrypted(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
 }
 
 impl Decode<'_> for MaybeEncryptedCephXTicketBlob {
@@ -288,8 +332,10 @@ impl Encode for MaybeEncryptedCephXTicketBlob {
     }
 }
 
+/// A CephX server challenge.
 #[derive(Debug, Clone)]
 pub struct CephXServerChallenge {
+    /// The challenge value.
     pub challenge: u64,
 }
 

@@ -1,5 +1,7 @@
+/// Payload for an additional reply message.
 #[derive(Debug, Clone)]
 pub struct AuthReplyMore {
+    /// The payload.
     pub payload: Vec<u8>,
 }
 

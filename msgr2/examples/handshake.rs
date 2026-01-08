@@ -10,7 +10,7 @@ use ceph_protocol::{
     frame::TxFrame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
-        auth::{AuthMethodCephX, AuthRequest, ConMode},
+        auth::{AuthMethodCephX, AuthRequest},
     },
 };
 
@@ -86,7 +86,7 @@ fn main() {
 
     let method = AuthMethodCephX { global_id: 0, name };
 
-    let auth_req = AuthRequest::new(method, vec![ConMode::Secure, ConMode::Crc]);
+    let auth_req = AuthRequest::new(method);
     let auth_req = connection.send_req(&auth_req);
     send(auth_req, &mut stream);
 

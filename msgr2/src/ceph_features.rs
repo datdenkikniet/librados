@@ -1,5 +1,7 @@
 use crate::{DecodeError, Encode};
 
+/// A ceph feature set, describing which features an entity
+/// supports.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CephFeatureSet {
     pub(crate) bits: u64,
@@ -19,13 +21,15 @@ macro_rules ! define_features {
                 feature!($qual: $bit, $incarnation, $name);
             )*
 
+            /// A list of all available [`CephFeatureSet`]s
             pub const LIST: &'static [CephFeatureSet] = &[
                 $(
                     CephFeatureSet::$name,
                 )*
             ];
 
-            pub const ALL: CephFeatureSet = CephFeatureSet::EMPTY $(.or(CephFeatureSet::$name))*;
+            /// A [`CephFeatureSet`] that contains all features.
+            pub const ALL: CephFeatureSet = CephFeatureSet::EMPTY $(.union(CephFeatureSet::$name))*;
         }
 
         impl core::fmt::Display for CephFeatureSet {
@@ -34,7 +38,7 @@ macro_rules ! define_features {
 
                 $(
                     if CephFeatureSet::$name != CephFeatureSet::EMPTY {
-                        if self.has(&CephFeatureSet::$name) {
+                        if self.contains(&CephFeatureSet::$name) {
                             if !output_any {
                                 write!(f, "{}", stringify!($name))?;
                             } else {
@@ -55,6 +59,7 @@ macro_rules ! define_features {
 
 macro_rules! feature {
     (a: $bit:literal, $incarnation:ident, $name:ident) => {
+        #[expect(missing_docs)]
         pub const $name: CephFeatureSet = CephFeatureSet {
             bits: 1 << $bit,
             mask: 1 << $bit | Self::$incarnation,
@@ -200,27 +205,29 @@ impl CephFeatureSet {
     const INCARNATION_1: u64 = 0;
     const INCARNATION_2: u64 = 1 << 57;
     const INCARNATION_3: u64 = 1 << 57 | 1 << 28;
+
+    /// The empty [`CephFeatureSet`].
     pub const EMPTY: CephFeatureSet = CephFeatureSet { bits: 0, mask: 0 };
 
-    pub fn get(&self) -> u64 {
-        self.bits
-    }
-
-    pub const fn or(self, rhs: Self) -> Self {
+    /// Combine this [`CephFeatureSet`] with another, yielding the union of the two.
+    pub const fn union(self, rhs: Self) -> Self {
         Self {
             bits: self.bits | rhs.bits,
             mask: self.mask | rhs.mask,
         }
     }
 
-    pub const fn and(self, rhs: Self) -> Self {
+    /// Combine this [`CephFeatureSet`] with another, yielding the intersection of the two.
+    pub const fn intersection(self, rhs: Self) -> Self {
         Self {
             bits: self.bits & rhs.bits,
             mask: self.mask & rhs.mask,
         }
     }
 
-    pub fn has(&self, features: &CephFeatureSet) -> bool {
+    /// Check whether this [`CephFeatureSet`] contains and supports
+    /// all features in `features`.
+    pub fn contains(&self, features: &CephFeatureSet) -> bool {
         self.bits & features.mask == features.mask
     }
 }
@@ -229,7 +236,7 @@ impl core::ops::BitOr for CephFeatureSet {
     type Output = CephFeatureSet;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        self.or(rhs)
+        self.union(rhs)
     }
 }
 
@@ -243,7 +250,7 @@ impl core::ops::BitAnd for CephFeatureSet {
     type Output = CephFeatureSet;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        self.and(rhs)
+        self.intersection(rhs)
     }
 }
 
@@ -256,21 +263,21 @@ impl core::ops::BitAndAssign for CephFeatureSet {
 #[test]
 fn all_has_all() {
     for feature in CephFeatureSet::LIST {
-        assert!(CephFeatureSet::ALL.has(feature), "{feature:?}");
+        assert!(CephFeatureSet::ALL.contains(feature), "{feature:?}");
     }
 }
 
 #[test]
 fn empty_has_none() {
     for feature in CephFeatureSet::LIST {
-        assert!(!CephFeatureSet::EMPTY.has(feature), "{feature:?}");
+        assert!(!CephFeatureSet::EMPTY.contains(feature), "{feature:?}");
     }
 }
 
 #[test]
 fn all_have_empty() {
     for feature in CephFeatureSet::LIST {
-        assert!(feature.has(&CephFeatureSet::EMPTY), "{feature:?}");
+        assert!(feature.contains(&CephFeatureSet::EMPTY), "{feature:?}");
     }
 }
 
@@ -281,7 +288,7 @@ fn has_combination() {
     let f3 = CephFeatureSet::CREATEPOOLID;
     let combined = f1 | f2;
 
-    assert!(combined.has(&f1));
-    assert!(combined.has(&f2));
-    assert!(!combined.has(&f3));
+    assert!(combined.contains(&f1));
+    assert!(combined.contains(&f2));
+    assert!(!combined.contains(&f3));
 }

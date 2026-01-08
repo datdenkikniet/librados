@@ -1,3 +1,6 @@
+//! A sans-IO implementation of a `msgr2` connection, with support
+//! for authentication-less and CephX connections.
+
 mod config;
 pub mod state;
 
@@ -241,7 +244,7 @@ impl Connection<Authenticating> {
         let mut auth_connection_secret = None;
 
         for info in &mut service_ticket_infos.info_list {
-            println!("Ticket entity: {:?}", info.service_id);
+            println!("Ticket entity: {:?}", info.ty);
             println!("Additional ticket data: {:?}", info.refresh_ticket);
 
             let service_session_ticket: CephXServiceTicket =
@@ -255,7 +258,7 @@ impl Connection<Authenticating> {
             let connection_secret: &[u8] =
                 decode_decrypt_enc_bl(&mut encrypted, &service_session_ticket.session_key)?;
 
-            if info.service_id == EntityType::Auth {
+            if info.ty == EntityType::Auth {
                 auth_service_ticket = Some(service_session_ticket);
                 auth_connection_secret = Some(connection_secret.to_vec());
             }
@@ -303,14 +306,14 @@ impl Connection<Authenticating> {
 
 impl Connection<ExchangingSignatures> {
     pub fn send_signature(&mut self) -> TxFrame<'_> {
-        let signature =
+        let sha256_hmac =
             if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
                 session_key.hmac_sha256(&self.state.rx_buf)
             } else {
                 [0u8; 32]
             };
 
-        let signature = AuthSignature { sha256: signature };
+        let signature = AuthSignature { sha256_hmac };
 
         self.buffer.clear();
         signature.encode(&mut self.buffer);
@@ -332,7 +335,7 @@ impl Connection<ExchangingSignatures> {
                 [0u8; 32]
             };
 
-        if signature.sha256 != valid_signature {
+        if signature.sha256_hmac != valid_signature {
             return Err("SHA256 mismatch".into());
         }
 
