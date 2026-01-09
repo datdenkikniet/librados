@@ -52,13 +52,15 @@ fn main() {
 
     println!("RX banner: {rx_banner:?}");
 
+    let target = EntityAddress {
+        ty: EntityAddressType::Msgr2,
+        nonce: 0,
+        address: stream.peer_addr().ok(),
+    };
+
     let hello = Hello {
         entity_type: EntityType::Client,
-        peer_address: EntityAddress {
-            ty: EntityAddressType::Msgr2,
-            nonce: 118844,
-            address: stream.peer_addr().ok(),
-        },
+        peer_address: target.clone(),
     };
 
     let hello_frame = connection.send_hello(&hello);
@@ -114,18 +116,11 @@ fn main() {
         panic!("Expected AuthSignature, got something else");
     };
 
-    println!("Received signature was correct. ({rx_sig:?})");
-
     let signature = connection.send_signature();
     send(signature, &mut stream);
 
     let mut connection = connection.recv_signature(&rx_sig).unwrap();
-
-    let target = EntityAddress {
-        ty: EntityAddressType::Msgr2,
-        nonce: 0,
-        address: stream.peer_addr().ok(),
-    };
+    println!("Received signature was correct. ({rx_sig:?})");
 
     let ident = ClientIdent {
         addresses: vec![rx_hello.peer_address],
