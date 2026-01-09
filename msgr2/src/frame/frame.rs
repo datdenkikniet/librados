@@ -33,7 +33,11 @@ pub(crate) struct Frame<'a> {
 impl<'a> Frame<'a> {
     pub(crate) fn new(tag: Tag, segments: &[&'a [u8]]) -> Option<Self> {
         if segments.is_empty() || segments.len() > 4 {
-            return None;
+            return Err("Invalid amount of segments".to_string());
+        }
+
+        if segments.last().map(|v| v.is_empty()).unwrap_or(false) {
+            return Err(format!("Last segment was empty."));
         }
 
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
@@ -111,8 +115,8 @@ impl<'a> Frame<'a> {
             buf.split_at_checked(len).ok_or_else(err)
         }
 
-        let segment0 = preamble.segments()[0];
         segments[0] = {
+            let segment0 = preamble.segments()[0];
             let padded_len = segment0
                 .len()
                 .next_multiple_of(preamble.format.segment_pad_size().get());
@@ -139,7 +143,7 @@ impl<'a> Frame<'a> {
         };
 
         for (idx, segment) in preamble.segments().iter().enumerate().skip(1) {
-            let padded_len = segment0
+            let padded_len = segment
                 .len()
                 .next_multiple_of(preamble.format.segment_pad_size().get());
 

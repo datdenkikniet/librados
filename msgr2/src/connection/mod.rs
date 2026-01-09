@@ -441,11 +441,6 @@ where
 
         let frame = Frame::decode(&frame.preamble(), frame.data())?;
 
-        assert!(
-            frame.segments().count() == 1,
-            "Multi-segment frames not supported yet."
-        );
-
         Message::decode(frame.tag(), frame.segments().next().unwrap())
     }
 }
