@@ -12,7 +12,7 @@ write_decode_encode!(Keepalive = timestamp);
 /// A keepalive ack.
 #[derive(Debug, Clone)]
 pub struct KeepaliveAck {
-    /// The timestamp at which this message was sent.
+    /// The timestamp of the received keepalive.
     pub timestamp: Timestamp,
 }
 
