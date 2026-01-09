@@ -3,10 +3,10 @@ use std::{
     net::TcpStream,
 };
 
-use ceph_protocol::{
+use msgr2::{
     CephFeatureSet, CryptoKey, Decode, EntityAddress, EntityAddressType, EntityName, EntityType,
     Timestamp,
-    connection::{Config, Connection, Message, state::Established},
+    connection::{ClientConnection, Config, Message, state::Established},
     frame::TxFrame,
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
@@ -19,7 +19,7 @@ fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     frame.write(w).unwrap();
 }
 
-fn recv<S>(connection: &mut Connection<S>, mut r: &mut impl std::io::Read) -> Message
+fn recv<S>(connection: &mut ClientConnection<S>, mut r: &mut impl std::io::Read) -> Message
 where
     S: Established,
 {
@@ -38,7 +38,7 @@ fn main() {
 
     let mut config = Config::new(true);
     config.request_ticket_for(EntityType::Osd);
-    let connection = ceph_protocol::connection::Connection::new(config);
+    let connection = msgr2::connection::ClientConnection::new(config);
 
     let mut banner = connection.banner().to_bytes();
 

@@ -45,18 +45,18 @@ impl From<DecodeError> for AuthError {
 }
 
 #[derive(Clone, Debug)]
-pub struct Connection<T> {
+pub struct ClientConnection<T> {
     state: T,
     config: Config,
     buffer: Vec<u8>,
 }
 
-impl<T> Connection<T> {
-    pub fn with_state<F, S>(self, state: F) -> Connection<S>
+impl<T> ClientConnection<T> {
+    pub fn with_state<F, S>(self, state: F) -> ClientConnection<S>
     where
         F: FnOnce(T) -> S,
     {
-        Connection {
+        ClientConnection {
             state: state(self.state),
             config: self.config,
             buffer: self.buffer,
@@ -64,7 +64,7 @@ impl<T> Connection<T> {
     }
 }
 
-impl Connection<Inactive> {
+impl ClientConnection<Inactive> {
     pub fn new(config: Config) -> Self {
         let mut me = Self {
             state: Inactive {
@@ -96,7 +96,10 @@ impl Connection<Inactive> {
     ///
     /// This step consumes the [`Connection`]. To retry connecting, you can
     /// clone the [`Connection<Inactive>`] and re-attempt to [`recv_banner`](Connection::recv_banner).
-    pub fn recv_banner(mut self, banner: &Banner) -> Result<Connection<ExchangeHello>, String> {
+    pub fn recv_banner(
+        mut self,
+        banner: &Banner,
+    ) -> Result<ClientConnection<ExchangeHello>, String> {
         self.state
             .rx_buf
             .extend_from_slice(banner.to_bytes().as_slice());
@@ -120,7 +123,7 @@ impl Connection<Inactive> {
     }
 }
 
-impl Connection<ExchangeHello> {
+impl ClientConnection<ExchangeHello> {
     pub fn send_hello<'me>(&'me mut self, hello: &Hello) -> TxFrame<'me> {
         self.buffer.clear();
         hello.encode(&mut self.buffer);
@@ -133,7 +136,7 @@ impl Connection<ExchangeHello> {
         self.tx_frame(frame)
     }
 
-    pub fn recv_hello(self, _hello: &Hello) -> Connection<Authenticating> {
+    pub fn recv_hello(self, _hello: &Hello) -> ClientConnection<Authenticating> {
         self.with_state(|state| Authenticating {
             revision: state.revision,
             encryption: state.encryption,
@@ -143,7 +146,7 @@ impl Connection<ExchangeHello> {
     }
 }
 
-impl Connection<Authenticating> {
+impl ClientConnection<Authenticating> {
     pub fn send_req<'me>(&'me mut self, request: &AuthRequest) -> TxFrame<'me> {
         self.buffer.clear();
         request.encode(&mut self.buffer);
@@ -207,7 +210,7 @@ impl Connection<Authenticating> {
     pub fn recv_none_done(
         self,
         done: &AuthDone,
-    ) -> Result<Connection<ExchangingSignatures>, AuthError> {
+    ) -> Result<ClientConnection<ExchangingSignatures>, AuthError> {
         if !done.auth_payload.is_empty() {
             Err(AuthError::UnexpectedData)
         } else {
@@ -225,7 +228,7 @@ impl Connection<Authenticating> {
         mut self,
         master_key: &CryptoKey,
         done: &AuthDone,
-    ) -> Result<Connection<ExchangingSignatures>, AuthError> {
+    ) -> Result<ClientConnection<ExchangingSignatures>, AuthError> {
         // TODO: save/use global ID somewhere?
         let auth_done = CephXMessage::decode(&mut done.auth_payload.as_slice())?;
 
@@ -238,13 +241,13 @@ impl Connection<Authenticating> {
 
         let mut tickets = auth_done.payload();
 
-        let mut service_ticket_infos = AuthServiceTicketReply::decode(&mut tickets)?;
+        let service_ticket_infos = AuthServiceTicketReply::decode(&mut tickets)?;
         assert!(tickets.is_empty());
 
         let mut auth_service_ticket = None;
         let mut auth_connection_secret = None;
 
-        for info in &mut service_ticket_infos.service_ticket_reply.tickets {
+        for mut info in service_ticket_infos.service_ticket_reply.tickets {
             println!("Ticket entity: {:?}", info.ty);
             println!("Additional ticket data: {:?}", info.refresh_ticket);
 
@@ -265,11 +268,6 @@ impl Connection<Authenticating> {
             }
         }
 
-        println!(
-            "Extra service tickets: {:?}",
-            service_ticket_infos.extra_service_tickets
-        );
-
         let Some(auth_service_ticket) = auth_service_ticket.take() else {
             return Err(AuthError::NoAuthTicket);
         };
@@ -277,6 +275,19 @@ impl Connection<Authenticating> {
         let Some(auth_service_secret) = auth_connection_secret.take() else {
             return Err(AuthError::NoConnectionSecret);
         };
+
+        for mut info in service_ticket_infos.extra_service_tickets.tickets {
+            println!("Extra ticket entity: {:?}", info.ty);
+            println!("Extra ticket additional data: {:?}", info.refresh_ticket);
+
+            let _service_session_ticket: CephXServiceTicket = decode_decrypt_enc_bl(
+                &mut info.encrypted_session_ticket,
+                &auth_service_ticket.session_key,
+            )?;
+
+            // TODO: do something with this (refresh?) ticket
+            let _service_refresh_ticket = &info.refresh_ticket;
+        }
 
         if done.connection_mode == ConMode::Secure {
             let encryption_key = auth_service_secret[00..16].try_into().unwrap();
@@ -311,7 +322,7 @@ impl Connection<Authenticating> {
     }
 }
 
-impl Connection<ExchangingSignatures> {
+impl ClientConnection<ExchangingSignatures> {
     pub fn send_signature(&mut self) -> TxFrame<'_> {
         let sha256_hmac =
             if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
@@ -334,7 +345,7 @@ impl Connection<ExchangingSignatures> {
     pub fn recv_signature(
         self,
         signature: &AuthSignature,
-    ) -> Result<Connection<Identifying>, String> {
+    ) -> Result<ClientConnection<Identifying>, String> {
         let valid_signature =
             if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
                 session_key.hmac_sha256(&self.state.tx_buf)
@@ -354,7 +365,7 @@ impl Connection<ExchangingSignatures> {
     }
 }
 
-impl Connection<Identifying> {
+impl ClientConnection<Identifying> {
     pub fn send_client_ident(&mut self, ident: &ClientIdent) -> TxFrame<'_> {
         self.buffer.clear();
         ident.encode(&mut self.buffer);
@@ -366,7 +377,10 @@ impl Connection<Identifying> {
     }
 
     #[expect(unused)]
-    pub fn recv_server_ident(self, ident: &ServerIdent) -> Result<Connection<Active>, String> {
+    pub fn recv_server_ident(
+        self,
+        ident: &ServerIdent,
+    ) -> Result<ClientConnection<Active>, String> {
         // TODO: verify details from `ident`.
 
         Ok(self.with_state(|state| Active {
@@ -377,7 +391,7 @@ impl Connection<Identifying> {
     }
 }
 
-impl Connection<Active> {
+impl ClientConnection<Active> {
     pub fn send<'me, M>(&'me mut self, message: M) -> TxFrame<'me>
     where
         M: Into<Message>,
@@ -395,7 +409,7 @@ impl Connection<Active> {
     }
 }
 
-impl<T> Connection<T>
+impl<T> ClientConnection<T>
 where
     T: Established,
 {
