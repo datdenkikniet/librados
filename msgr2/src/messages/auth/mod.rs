@@ -76,11 +76,13 @@ impl Decode<'_> for AuthMethod {
 /// A connection mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConMode {
-    /// Unknown.
-    Unknown = 0,
-    /// Checksum-based connection.
+    /// Checksum based connection. This type of connection
+    /// only employs CRCs for detection of corruption of in-flight
+    /// data, but does _not_ provide any security measures.
     Crc = 1,
-    /// A secured connection.
+    /// A secured connection. This type of connection encrypts
+    /// and signs all transmitted data, which provides confidentiality
+    /// and integrity guarantees.
     Secure = 2,
 }
 
@@ -105,7 +107,10 @@ impl TryFrom<u8> for ConMode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         let res = match value {
-            0 => Self::Unknown,
+            // This is, technically, its own value. However,
+            // it makes no sense to represent it: it is unknown,
+            // after all.
+            // 0 => Self::Unknown,
             1 => Self::Crc,
             2 => Self::Secure,
             _ => return Err(DecodeError::unknown_value("ConMode", value)),
