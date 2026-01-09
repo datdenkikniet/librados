@@ -14,20 +14,24 @@ pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
     method: AuthMethod,
+    /// A prioritized list of preferred connection modes.
     preferred_modes: Vec<ConMode>,
     auth_payload: Vec<u8>,
 }
 
 impl AuthRequest {
-    /// Create a new authentication request for the provided method.
-    pub fn new<T>(auth_method: T) -> Self
+    /// Create a new authentication request for the provided method and preferred methods.
+    ///
+    /// `preferred_methods` is an ordered list (where the first item is the most-preferred),
+    /// from which the server that is being communicated with will pick a connection mode.
+    /// See [`ConMode`] for more information about the different connection modes.
+    pub fn new<T>(auth_method: T, preferred_modes: Vec<ConMode>) -> Self
     where
         T: AuthRequestPayload,
     {
         Self {
             method: T::METHOD,
-            // TODO: this order matters? Why?
-            preferred_modes: vec![ConMode::Secure, ConMode::Crc],
+            preferred_modes,
             auth_payload: auth_method.to_vec(),
         }
     }

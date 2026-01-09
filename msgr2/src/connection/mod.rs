@@ -18,6 +18,7 @@ use crate::{
         ServerIdent,
         auth::{
             AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
+            ConMode,
         },
         cephx::{AuthServiceTicketReply, CephXMessage, CephXMessageType, CephXServiceTicket},
     },
@@ -277,25 +278,28 @@ impl Connection<Authenticating> {
             return Err(AuthError::NoConnectionSecret);
         };
 
-        // We are encrypted here: let's deal with that
+        if done.connection_mode == ConMode::Secure {
+            let encryption_key = auth_service_secret[00..16].try_into().unwrap();
+            let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
+            let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
 
-        let encryption_key = auth_service_secret[00..16].try_into().unwrap();
-        let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
-        let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
+            let encryption_key = CryptoKey::new(
+                // TODO: probably best not to have this creation time be not completely BS
+                Timestamp {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+                encryption_key,
+            );
 
-        let encryption_key = CryptoKey::new(
-            // TODO: probably best not to have this creation time be not completely BS
-            Timestamp {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            encryption_key,
-        );
-
-        let revision = self.state.revision;
-        self.state
-            .encryption_mut()
-            .set_secret_data(revision, encryption_key, rx_nonce, tx_nonce);
+            let revision = self.state.revision;
+            self.state.encryption_mut().set_secret_data(
+                revision,
+                encryption_key,
+                rx_nonce,
+                tx_nonce,
+            );
+        }
 
         Ok(self.with_state(|state| ExchangingSignatures {
             auth_ticket: Some(auth_service_ticket),
