@@ -26,7 +26,8 @@ impl AuthRequest {
     {
         Self {
             method: T::METHOD,
-            preferred_modes: vec![ConMode::Crc, ConMode::Secure],
+            // TODO: this order matters? Why?
+            preferred_modes: vec![ConMode::Secure, ConMode::Crc],
             auth_payload: auth_method.to_vec(),
         }
     }
