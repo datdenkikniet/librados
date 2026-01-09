@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 
 pub(crate) use encryption::FrameEncryption;
 pub(crate) use epilogue::Epilogue;
-pub(crate) use frame::Frame;
+pub use frame::Frame;
 pub(crate) use preamble::Preamble;
 
 pub use preamble::Tag;

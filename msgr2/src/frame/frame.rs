@@ -24,14 +24,14 @@ const EMPTY: &'static [u8] = &[];
 const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 #[derive(Debug, Clone)]
-pub(crate) struct Frame<'a> {
+pub struct Frame<'a> {
     tag: Tag,
     valid_segments: NonZeroU8,
     segments: [&'a [u8]; 4],
 }
 
 impl<'a> Frame<'a> {
-    pub(crate) fn new(tag: Tag, segments: &[&'a [u8]]) -> Option<Self> {
+    pub fn new(tag: Tag, segments: &[&'a [u8]]) -> Result<Self, String> {
         if segments.is_empty() || segments.len() > 4 {
             return Err("Invalid amount of segments".to_string());
         }
@@ -45,14 +45,14 @@ impl<'a> Frame<'a> {
         let mut segments_out = [EMPTY; 4];
         segments_out[..segments.len()].copy_from_slice(segments);
 
-        Some(Self {
+        Ok(Self {
             tag,
             valid_segments,
             segments: segments_out,
         })
     }
 
-    pub fn preamble(&self, format: FrameFormat) -> Preamble {
+    pub(crate) fn preamble(&self, format: FrameFormat) -> Preamble {
         let mut segment_details = [SegmentDetail::default(); 4];
         for (idx, segment) in self.segments().enumerate() {
             segment_details[idx] = SegmentDetail {
@@ -96,7 +96,7 @@ impl<'a> Frame<'a> {
         preamble.write_epilogue(crcs.as_slice(), output);
     }
 
-    pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
+    pub(crate) fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
         let mut trailer = data;
 
         let mut segments = [EMPTY; 4];
