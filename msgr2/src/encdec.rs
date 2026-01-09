@@ -158,6 +158,12 @@ impl DecodeError {
 /// The on-wire representation of a string.
 pub struct WireString<'a>(&'a str);
 
+impl WireString<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
 impl<'a> Decode<'a> for WireString<'a> {
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, crate::DecodeError> {
         let slice = <&[u8]>::decode(buffer)?;
@@ -193,6 +199,12 @@ impl TryFrom<WireString<'_>> for String {
 
     fn try_from(value: WireString) -> Result<Self, Self::Error> {
         Ok(value.0.to_string())
+    }
+}
+
+impl<'a> From<WireString<'a>> for &'a str {
+    fn from(value: WireString<'a>) -> Self {
+        value.0
     }
 }
 
