@@ -2,6 +2,7 @@
 
 use std::ops::RangeInclusive;
 
+#[macro_export]
 macro_rules! write_decode_encode {
     (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {
         return Ok($struct { $($fields,)* });

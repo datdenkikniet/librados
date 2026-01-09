@@ -4,14 +4,15 @@ use std::{
 };
 
 use msgr2::{
-    CephFeatureSet, CryptoKey, Decode, EntityAddress, EntityAddressType, EntityName, EntityType,
-    Timestamp,
+    CephFeatureSet, CryptoKey, Decode, DecodeError, Encode, EntityAddress, EntityAddressType,
+    EntityName, EntityType, Timestamp,
     connection::{ClientConnection, Config, Message, state::Established},
-    frame::TxFrame,
+    frame::{Completed, Frame, RxFrame, Tag, TxFrame},
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{AuthMethodCephX, AuthRequest, ConMode},
     },
+    write_decode_encode,
 };
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
@@ -19,16 +20,26 @@ fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     frame.write(w).unwrap();
 }
 
-fn recv<S>(connection: &mut ClientConnection<S>, mut r: &mut impl std::io::Read) -> Message
+fn recv_raw<'buf, S>(
+    buffer: &'buf mut Vec<u8>,
+    connection: &mut ClientConnection<S>,
+    mut r: &mut impl std::io::Read,
+) -> RxFrame<'buf, Completed>
+where
+    S: Established,
+{
+    let rx_frame = connection.start_rx(buffer);
+
+    let read_preamble = rx_frame.read_preamble(&mut r).unwrap();
+    read_preamble.read_rest(&mut r).unwrap()
+}
+
+fn recv<'buf, S>(connection: &mut ClientConnection<S>, r: &mut impl std::io::Read) -> Message
 where
     S: Established,
 {
     let mut buffer = Vec::new();
-    let rx_frame = connection.start_rx(&mut buffer);
-
-    let read_preamble = rx_frame.read_preamble(&mut r).unwrap();
-    let completed = read_preamble.read_rest(&mut r).unwrap();
-
+    let completed = recv_raw(&mut buffer, connection, r);
     connection.finish_rx(completed).unwrap()
 }
 
@@ -162,4 +173,137 @@ fn main() {
     let rx_keepalive = recv(&mut connection, &mut stream);
 
     println!("Keepalive RX: {rx_keepalive:?}");
+
+    let header = CephMessageHeader2 {
+        seq: 1,
+        tid: 0,
+        ty: CephMessageType::Ping,
+        priority: 0,
+        version: 0,
+        data_pre_padding_len: 0,
+        data_off: 0,
+        ack_seq: 0,
+        flags: CephMessageHeader2Flags(0),
+        compat_version: 0,
+        reserved: 0,
+    };
+
+    let header = header.to_vec();
+
+    // TODO: frame::new_message()?
+    let frame = Frame::new(Tag::Message, &[&header]).unwrap();
+    let frame = connection.send_raw(&frame);
+    send(frame, &mut stream);
+
+    let mut buffer = Vec::new();
+    let next = recv_raw(&mut buffer, &mut connection, &mut stream);
+    let next = connection.finish_rx_raw(&next).unwrap();
+    println!("Next: {:?}", next);
+    let mut reply_string = next.segments().skip(1).next().unwrap();
+    let reply_string = <&[u8]>::decode(&mut reply_string).unwrap();
+    let reply_string = std::str::from_utf8(reply_string).unwrap();
+    println!("Ping reply JSON payload: {reply_string}");
+}
+
+pub struct CephMessageHeader2Flags(u8);
+
+impl Decode<'_> for CephMessageHeader2Flags {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, msgr2::DecodeError> {
+        let (value, rest) = buffer
+            .split_first()
+            .ok_or_else(|| DecodeError::NotEnoughData {
+                field: None,
+                have: 0,
+                need: 1,
+            })?;
+
+        *buffer = rest;
+        Ok(Self(*value))
+    }
+}
+
+impl Encode for CephMessageHeader2Flags {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        buffer.push(self.0)
+    }
+}
+
+struct CephMessageHeader2 {
+    pub seq: u64,
+    pub tid: u64,
+    pub ty: CephMessageType,
+    pub priority: u16,
+    pub version: u16,
+    pub data_pre_padding_len: u32,
+    // TODO: automatically mask against PAGE_MASK
+    pub data_off: u16,
+    pub ack_seq: u64,
+    pub flags: CephMessageHeader2Flags,
+    pub compat_version: u16,
+    pub reserved: u16,
+}
+
+write_decode_encode!(
+    CephMessageHeader2 = seq
+        | tid
+        | ty as u16
+        | priority
+        | version
+        | data_pre_padding_len
+        | data_off
+        | ack_seq
+        | flags
+        | compat_version
+        | reserved
+);
+
+macro_rules! msg_type {
+    ($($n:ident = $v:literal,)*)  => {
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        #[repr(u16)]
+        pub enum CephMessageType {
+            $(
+                $n = $v,
+            )*
+        }
+
+        impl TryFrom<u16> for CephMessageType {
+            type Error = DecodeError;
+
+            fn try_from(value: u16) -> Result<Self, Self::Error> {
+                match value {
+                    $(
+                        $v => Ok(Self::$n),
+                    )*
+                    v => Err(DecodeError::unknown_value("CephMessageType", v)),
+                }
+            }
+        }
+
+    };
+}
+
+msg_type! {
+    ShutDown = 1,
+    Ping = 2,
+    MonMap = 4,
+    MonGetMap = 5,
+    MonGetOsdMap = 6,
+    MonMetadata = 7,
+    StatFs = 13,
+    StatFsReply = 14,
+    MonSubscribe = 15,
+    MonSubscribeAck = 16,
+    Auth = 17,
+    AuthReply = 18,
+    MonGetVersion = 19,
+    MonGetVersionReply = 20,
+    GetPoolStats = 58,
+    GetPoolStatsReply = 59,
+}
+
+impl From<&CephMessageType> for u16 {
+    fn from(value: &CephMessageType) -> Self {
+        *value as u16
+    }
 }

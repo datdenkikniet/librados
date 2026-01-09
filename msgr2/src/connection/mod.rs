@@ -133,7 +133,7 @@ impl ClientConnection<ExchangeHello> {
 
         frame.write(self.state.format(), &mut self.state.tx_buf);
 
-        self.tx_frame(frame)
+        self.tx_frame(&frame)
     }
 
     pub fn recv_hello(self, _hello: &Hello) -> ClientConnection<Authenticating> {
@@ -156,7 +156,7 @@ impl ClientConnection<Authenticating> {
 
         frame.write(self.state.format(), &mut self.state.tx_buf);
 
-        self.tx_frame(frame)
+        self.tx_frame(&frame)
     }
 
     pub fn recv_cephx_server_challenge<'me>(
@@ -204,7 +204,7 @@ impl ClientConnection<Authenticating> {
 
         frame.write(self.state.format(), &mut self.state.tx_buf);
 
-        self.tx_frame(frame)
+        self.tx_frame(&frame)
     }
 
     pub fn recv_none_done(
@@ -339,7 +339,7 @@ impl ClientConnection<ExchangingSignatures> {
         let signature = self.buffer.clone();
         let frame = Frame::new(Tag::AuthSignature, &[&signature]).unwrap();
 
-        self.tx_frame(frame)
+        self.tx_frame(&frame)
     }
 
     pub fn recv_signature(
@@ -373,7 +373,7 @@ impl ClientConnection<Identifying> {
         let ident = self.buffer.clone();
         let frame = Frame::new(Tag::ClientIdent, &[&ident]).unwrap();
 
-        self.tx_frame(frame)
+        self.tx_frame(&frame)
     }
 
     #[expect(unused)]
@@ -405,6 +405,10 @@ impl ClientConnection<Active> {
 
         let buffer = self.buffer.clone();
         let frame = Frame::new(message.tag(), &[&buffer]).unwrap();
+        self.tx_frame(&frame)
+    }
+
+    pub fn send_raw<'me>(&'me mut self, frame: &Frame) -> TxFrame<'me> {
         self.tx_frame(frame)
     }
 }
@@ -417,7 +421,7 @@ where
         &self.state
     }
 
-    fn tx_frame<'me>(&'me mut self, frame: Frame<'_>) -> TxFrame<'me> {
+    fn tx_frame<'me>(&'me mut self, frame: &Frame<'_>) -> TxFrame<'me> {
         self.buffer.clear();
         frame.write(self.state.format(), &mut self.buffer);
 
@@ -436,12 +440,18 @@ where
     }
 
     pub fn finish_rx(&mut self, frame: RxFrame<'_, Completed>) -> Result<Message, DecodeError> {
+        let frame = self.finish_rx_raw(&frame)?;
+        Message::decode(frame.tag(), frame.segments().next().unwrap())
+    }
+
+    pub fn finish_rx_raw<'frame>(
+        &mut self,
+        frame: &'frame RxFrame<'frame, Completed>,
+    ) -> Result<Frame<'frame>, DecodeError> {
         self.state.recv_data(frame.preamble_data());
         self.state.recv_data(frame.data());
 
-        let frame = Frame::decode(&frame.preamble(), frame.data())?;
-
-        Message::decode(frame.tag(), frame.segments().next().unwrap())
+        Frame::decode(frame.preamble(), frame.data())
     }
 }
 

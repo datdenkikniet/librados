@@ -44,7 +44,7 @@ impl<'a> Epilogue<'a> {
             FrameFormat::Rev0Crc => self.late_flags & 0x1 == 0x0,
             FrameFormat::Rev1Crc => self.late_flags & 0xF == 0xE,
             FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => todo!(),
+            FrameFormat::Rev1Secure => self.late_flags & 0xF == 0xE,
         }
     }
 }
