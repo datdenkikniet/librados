@@ -5,7 +5,7 @@ use std::{
 
 use msgr2::{
     CephFeatureSet, CryptoKey, Decode, DecodeError, Encode, EntityAddress, EntityAddressType,
-    EntityName, EntityType, Timestamp,
+    EntityName, EntityType, Timestamp, WireString,
     connection::{ClientConnection, Config, Message, state::Established},
     frame::{Completed, Frame, RxFrame, Tag, TxFrame},
     messages::{
@@ -200,8 +200,7 @@ fn main() {
     let next = connection.finish_rx_raw(&next).unwrap();
     println!("Next: {:?}", next);
     let mut reply_string = next.segments().skip(1).next().unwrap();
-    let reply_string = <&[u8]>::decode(&mut reply_string).unwrap();
-    let reply_string = std::str::from_utf8(reply_string).unwrap();
+    let reply_string: &str = WireString::decode(&mut reply_string).unwrap().into();
     println!("Ping reply JSON payload: {reply_string}");
 }
 
