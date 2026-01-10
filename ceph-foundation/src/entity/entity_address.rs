@@ -5,6 +5,64 @@ const AF_INET6: u16 = 10;
 
 use crate::{Decode, DecodeError, Encode};
 
+#[derive(Clone, Copy)]
+struct SocketAddressWrapper(SocketAddr);
+
+impl SocketAddressWrapper {
+    pub fn encoded_len(&self) -> u32 {
+        match self.0 {
+            SocketAddr::V4(_) => 6,
+            SocketAddr::V6(_) => 26,
+        }
+    }
+}
+
+impl Encode for SocketAddressWrapper {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        match &self.0 {
+            SocketAddr::V4(v4_addr) => {
+                AF_INET.encode(buffer);
+                // IMPORTANT: port is encoded big-endian, so swap()
+                v4_addr.port().swap_bytes().encode(buffer);
+                v4_addr.ip().octets().encode(buffer);
+            }
+            SocketAddr::V6(v6_addr) => {
+                AF_INET6.encode(buffer);
+                // IMPORTANT: port is encoded big-endian, so swap()
+                v6_addr.port().swap_bytes().encode(buffer);
+                v6_addr.flowinfo().encode(buffer);
+                v6_addr.ip().octets().encode(buffer);
+                v6_addr.scope_id().encode(buffer);
+            }
+        };
+    }
+}
+
+impl Decode<'_> for SocketAddressWrapper {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
+        let family = u16::decode(buffer)?;
+
+        if family == AF_INET {
+            let port = u16::decode(buffer)?.swap_bytes();
+            let data: [u8; 4] = Decode::decode(buffer)?;
+            let address = Ipv4Addr::from_octets(data);
+            Ok(Self(SocketAddr::V4(SocketAddrV4::new(address, port))))
+        } else if family == AF_INET6 {
+            let port = u16::decode(buffer)?.swap_bytes();
+            let flowinfo = u32::decode(buffer)?;
+            let address_data: [u8; 16] = Decode::decode(buffer)?;
+            let address = Ipv6Addr::from_octets(address_data);
+            let scope_id = u32::decode(buffer)?;
+
+            Ok(Self(SocketAddr::V6(SocketAddrV6::new(
+                address, port, flowinfo, scope_id,
+            ))))
+        } else {
+            return Err(DecodeError::unknown_value("AddressFamily", family));
+        }
+    }
+}
+
 /// An entity address.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityAddress {
@@ -18,17 +76,8 @@ pub struct EntityAddress {
 
 impl Encode for EntityAddress {
     fn encode(&self, buffer: &mut Vec<u8>) {
-        let address_len = self
-            .address
-            .map(|v| {
-                let addr_len = match v {
-                    SocketAddr::V4(_) => 6,
-                    SocketAddr::V6(_) => 26,
-                };
-
-                2 + addr_len
-            })
-            .unwrap_or(0) as u32;
+        let address = self.address.map(SocketAddressWrapper);
+        let address_len = address.map(|v| 2 + v.encoded_len()).unwrap_or(0) as u32;
 
         let len = 3 // Version bytes
             + 4 // Len
@@ -43,89 +92,59 @@ impl Encode for EntityAddress {
 
         let data_len = len - 3 - 4;
         data_len.encode(buffer);
-        (self.ty as u32).encode(buffer);
+        u32::from(self.ty).encode(buffer);
         self.nonce.encode(buffer);
         address_len.encode(buffer);
 
-        match self.address {
-            Some(SocketAddr::V4(v4_addr)) => {
-                (AF_INET as u16).encode(buffer);
-
-                // TODO: how to deal with be-encoding port?
-                buffer.extend_from_slice(&v4_addr.port().to_be_bytes());
-
-                v4_addr.ip().octets().encode(buffer);
-            }
-            Some(SocketAddr::V6(v6_addr)) => {
-                (AF_INET6 as u16).encode(buffer);
-
-                // TODO: how to deal with be-encoding port?
-                buffer.extend_from_slice(&v6_addr.port().to_be_bytes());
-
-                v6_addr.flowinfo().encode(buffer);
-                v6_addr.ip().octets().encode(buffer);
-                v6_addr.scope_id().encode(buffer);
-            }
-            None => {}
-        };
+        if let Some(address) = address {
+            address.encode(buffer);
+        }
     }
 }
 
 impl Decode<'_> for EntityAddress {
     fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
-        // TODO: length check!
+        let versions: [u8; 3] = Decode::decode(buffer).map_err(|e| e.for_field("versions"))?;
 
-        let mut used = 1;
-        let address_version = buffer[0];
-        // 1 = has feature addr2 (is this msgr2?)
-        assert_eq!(address_version, 1);
+        if versions[0] != 1 {
+            return Err(DecodeError::UnexpectedVersion {
+                ty: "EntityAddress.version",
+                got: versions[0],
+                expected: 1..=1,
+            });
+        }
 
-        used += 1;
-        let encoding_version = buffer[1];
-        assert_eq!(encoding_version, 1);
+        if versions[1] != 1 {
+            return Err(DecodeError::UnexpectedVersion {
+                ty: "EntityAddress.encoding_version",
+                got: versions[0],
+                expected: 1..=1,
+            });
+        }
 
-        used += 1;
-        let encoding_compat = buffer[2];
-        assert_eq!(encoding_compat, 1);
+        if versions[2] != 1 {
+            return Err(DecodeError::UnexpectedVersion {
+                ty: "EntityAddress.encoding_compat",
+                got: versions[0],
+                expected: 1..=1,
+            });
+        }
 
-        let len = u32::from_le_bytes(buffer[3..7].try_into().unwrap());
-        assert!(buffer[7..].len() >= len as _);
-        used += 4 + len;
+        let additional_data = <&[u8]>::decode(buffer)?;
+        let mut additional_data = additional_data;
 
-        let ty = u32::from_le_bytes(buffer[7..11].try_into().unwrap());
+        let ty = u32::decode(&mut additional_data)?.try_into()?;
 
-        let ty = EntityAddressType::try_from(ty)?;
+        let nonce = u32::decode(&mut additional_data)?;
 
-        let nonce = u32::from_le_bytes(buffer[11..15].try_into().unwrap());
+        let address_data = <&[u8]>::decode(&mut additional_data)?;
+        let mut address_data = address_data;
 
-        let address_len = u32::from_le_bytes(buffer[15..19].try_into().unwrap()) as usize;
-
-        let address = if address_len != 0 {
-            let family = u16::from_le_bytes(buffer[19..21].try_into().unwrap());
-            let data = &buffer[21..21 + (address_len - 2)];
-
-            if family == AF_INET {
-                let port = u16::from_be_bytes(data[..2].try_into().unwrap());
-                let address = Ipv4Addr::new(data[2], data[3], data[4], data[5]);
-
-                Some(SocketAddr::V4(SocketAddrV4::new(address, port)))
-            } else if family == AF_INET6 {
-                let port = u16::from_be_bytes(data[..2].try_into().unwrap());
-                let flowinfo = u32::from_le_bytes(data[2..6].try_into().unwrap());
-                let address = Ipv6Addr::from_octets(data[6..22].try_into().unwrap());
-                let scope_id = u32::from_le_bytes(data[22..26].try_into().unwrap());
-
-                Some(SocketAddr::V6(SocketAddrV6::new(
-                    address, port, flowinfo, scope_id,
-                )))
-            } else {
-                return Err(DecodeError::unknown_value("AddressFamily", family));
-            }
+        let address = if !address_data.is_empty() {
+            Some(SocketAddressWrapper::decode(&mut address_data)?.0)
         } else {
             None
         };
-
-        *buffer = &buffer[used as _..];
 
         Ok(Self { nonce, ty, address })
     }
@@ -142,6 +161,12 @@ pub enum EntityAddressType {
     Msgr2 = 2,
     Any = 3,
     Cidr = 4,
+}
+
+impl From<EntityAddressType> for u32 {
+    fn from(value: EntityAddressType) -> Self {
+        value as u32
+    }
 }
 
 impl TryFrom<u32> for EntityAddressType {
@@ -168,4 +193,73 @@ impl TryFrom<u8> for EntityAddressType {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         Self::try_from(value as u32)
     }
+}
+
+#[test]
+fn round_trip_v4() {
+    let v4 = EntityAddress {
+        ty: EntityAddressType::Legacy,
+        nonce: 42,
+        address: Some(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::from_octets([1, 2, 3, 4]),
+            1337,
+        ))),
+    };
+
+    let encoded = v4.to_vec();
+    let decoded = EntityAddress::decode(&mut encoded.as_slice()).unwrap();
+    assert_eq!(v4, decoded);
+}
+
+#[test]
+fn round_trip_v6() {
+    let v6 = EntityAddress {
+        ty: EntityAddressType::Legacy,
+        nonce: 42,
+        address: Some(SocketAddr::V6(SocketAddrV6::new(
+            Ipv6Addr::from_octets([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+            1337,
+            9001,
+            3999,
+        ))),
+    };
+
+    let encoded = v6.to_vec();
+    let decoded = EntityAddress::decode(&mut encoded.as_slice()).unwrap();
+    assert_eq!(v6, decoded);
+}
+
+#[test]
+fn round_trip_none() {
+    let v6 = EntityAddress {
+        ty: EntityAddressType::Legacy,
+        nonce: 42,
+        address: None,
+    };
+
+    let encoded = v6.to_vec();
+    let decoded = EntityAddress::decode(&mut encoded.as_slice()).unwrap();
+    assert_eq!(v6, decoded);
+}
+
+#[test]
+fn sanity_check_v6() {
+    let data = &[
+        1, 1, 1, 40, 0, 0, 0, 1, 0, 0, 0, 42, 0, 0, 0, 28, 0, 0, 0, 10, 0, 5, 57, 41, 35, 0, 0, 1,
+        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 159, 15, 0, 0,
+    ];
+
+    let expected = EntityAddress {
+        ty: EntityAddressType::Legacy,
+        nonce: 42,
+        address: Some(SocketAddr::V6(SocketAddrV6::new(
+            Ipv6Addr::from_octets([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+            1337,
+            9001,
+            3999,
+        ))),
+    };
+    let decoded = EntityAddress::decode(&mut data.as_slice()).unwrap();
+
+    assert_eq!(expected, decoded);
 }
