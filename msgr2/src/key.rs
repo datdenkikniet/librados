@@ -146,7 +146,20 @@ impl CryptoKey {
 fn decode_key() {
     let key_data = include_bytes!("./test.key");
 
-    let key = CryptoKey::decode(&mut &key_data[..]);
+    let key = CryptoKey::decode(&mut &key_data[..]).unwrap();
 
-    panic!("{key:?}");
+    assert_eq!(key.ty, 1);
+    assert_eq!(
+        key.created,
+        Timestamp {
+            tv_sec: 1763662875,
+            tv_nsec: 702926448
+        }
+    );
+    assert_eq!(
+        key.secret,
+        &[
+            157, 25, 114, 34, 166, 24, 254, 3, 91, 218, 89, 106, 184, 116, 189, 55
+        ]
+    );
 }

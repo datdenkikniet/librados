@@ -270,7 +270,9 @@ fn all_has_all() {
 #[test]
 fn empty_has_none() {
     for feature in CephFeatureSet::LIST {
-        assert!(!CephFeatureSet::EMPTY.contains(feature), "{feature:?}");
+        if feature != &CephFeatureSet::EMPTY {
+            assert!(!CephFeatureSet::EMPTY.contains(feature), "{feature:?}");
+        }
     }
 }
 
