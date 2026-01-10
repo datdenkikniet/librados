@@ -108,6 +108,14 @@ impl ClientConnection<Inactive> {
             return Err("Peer requires compression, which we do not support".into());
         }
 
+        if !self.banner().compatible(&banner) {
+            return Err(format!(
+                "Peer requires unknown msgr2 features that we do not support. Supported: {:?}, peer required: 0x{:?}",
+                self.banner().supported(),
+                banner.required()
+            ));
+        }
+
         let revision = if self.config.support_rev21() && banner.supported().revision_21() {
             Revision::Rev1
         } else {
