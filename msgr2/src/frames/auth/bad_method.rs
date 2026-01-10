@@ -1,4 +1,4 @@
-use crate::messages::auth::{AuthMethod, ConMode};
+use crate::frames::auth::{AuthMethod, ConMode};
 
 /// A message indicating that the requested authentication method
 /// was no good.

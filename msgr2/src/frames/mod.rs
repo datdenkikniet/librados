@@ -1,6 +1,6 @@
 //! Messages that can be exchanged over a `msgr2` connection.
 
-pub mod auth;
+mod auth;
 mod banner;
 mod client_ident;
 mod hello;
@@ -8,6 +8,10 @@ mod ident_missing_features;
 mod keepalive;
 mod server_ident;
 
+pub use auth::{
+    AuthBadMethod, AuthDone, AuthMethod, AuthMethodCephX, AuthMethodNone, AuthReplyMore,
+    AuthRequest, AuthRequestMore, AuthRequestPayload, AuthSignature, ConMode,
+};
 pub use banner::Banner;
 pub use client_ident::ClientIdent;
 pub use hello::Hello;

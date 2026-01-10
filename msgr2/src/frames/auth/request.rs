@@ -2,7 +2,7 @@ use ceph_foundation::Encode;
 
 use crate::{
     EntityName,
-    messages::auth::{AuthMethod, ConMode},
+    frames::auth::{AuthMethod, ConMode},
 };
 
 /// An authentication request payload.

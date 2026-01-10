@@ -1,4 +1,4 @@
-use crate::messages::auth::ConMode;
+use crate::frames::auth::ConMode;
 
 /// Authentication is done, and an authenticated
 /// session has started.
