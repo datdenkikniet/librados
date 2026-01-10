@@ -18,7 +18,7 @@ impl Default for Banner {
     }
 }
 
-const HEADER: &'static [u8] = b"ceph v2\n";
+const HEADER: &[u8] = b"ceph v2\n";
 
 impl Banner {
     /// The size (in bytes) of a serialized banner.

@@ -21,7 +21,7 @@ where
 {
     let mut decrypted = key
         .decrypt(buf)
-        .ok_or_else(|| DecodeError::Custom(format!("Decryption failed.")))?;
+        .ok_or_else(|| DecodeError::Custom("Decryption failed.".to_string()))?;
 
     let buf = &mut decrypted;
 
@@ -55,7 +55,7 @@ where
 }
 
 pub fn encode_encrypt<T: Encode>(t: &T, key: &CryptoKey) -> Vec<u8> {
-    let encode_encrypt_bl = encode_encrypt_enc_bl(t, &key);
+    let encode_encrypt_bl = encode_encrypt_enc_bl(t, key);
     let mut encoded = Vec::new();
     encode_encrypt_bl.encode(&mut encoded);
     encoded

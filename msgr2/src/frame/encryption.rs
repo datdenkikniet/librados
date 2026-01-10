@@ -11,8 +11,14 @@ pub struct FrameEncryption {
     inner: EncryptionInner,
 }
 
+impl Default for FrameEncryption {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FrameEncryption {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             inner: EncryptionInner::None,
         }
@@ -44,7 +50,7 @@ impl FrameEncryption {
         }
     }
 
-    pub fn decrypt<'a>(&mut self, buffer: &'a mut [u8]) -> Result<usize, DecryptError> {
+    pub fn decrypt(&mut self, buffer: &mut [u8]) -> Result<usize, DecryptError> {
         match &mut self.inner {
             EncryptionInner::None => Ok(0),
             EncryptionInner::CryptoKey {
@@ -65,7 +71,7 @@ impl FrameEncryption {
         }
     }
 
-    pub fn encrypt<'a>(&mut self, buffer: &'a mut [u8]) -> Result<[u8; 16], EncryptError> {
+    pub fn encrypt(&mut self, buffer: &mut [u8]) -> Result<[u8; 16], EncryptError> {
         match &mut self.inner {
             EncryptionInner::None => Ok([0u8; _]),
             EncryptionInner::CryptoKey {
