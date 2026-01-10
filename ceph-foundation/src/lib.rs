@@ -1,7 +1,10 @@
 pub mod crypto;
 mod encdec;
+pub mod entity;
+mod features;
 
 pub use encdec::{Decode, DecodeError, Encode, WireString};
+pub use features::CephFeatureSet;
 
 /// A UTC timestamp.
 #[derive(Default, Debug, Clone, PartialEq)]

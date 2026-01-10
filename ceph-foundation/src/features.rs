@@ -1,4 +1,4 @@
-use ceph_foundation::{DecodeError, Encode};
+use crate::DecodeError;
 
 /// A ceph feature set, describing which features an entity
 /// supports.
@@ -6,12 +6,6 @@ use ceph_foundation::{DecodeError, Encode};
 pub struct CephFeatureSet {
     pub(crate) bits: u64,
     pub(crate) mask: u64,
-}
-
-impl Encode for CephFeatureSet {
-    fn encode(&self, buffer: &mut Vec<u8>) {
-        self.bits.encode(buffer);
-    }
 }
 
 macro_rules ! define_features {

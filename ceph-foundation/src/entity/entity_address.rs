@@ -1,8 +1,9 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use libc::{AF_INET, AF_INET6};
+const AF_INET: u16 = 2;
+const AF_INET6: u16 = 10;
 
-use ceph_foundation::{Decode, DecodeError, Encode};
+use crate::{Decode, DecodeError, Encode};
 
 /// An entity address.
 #[derive(Debug, Clone, PartialEq)]
@@ -103,12 +104,12 @@ impl Decode<'_> for EntityAddress {
             let family = u16::from_le_bytes(buffer[19..21].try_into().unwrap());
             let data = &buffer[21..21 + (address_len - 2)];
 
-            if family as i32 == AF_INET {
+            if family == AF_INET {
                 let port = u16::from_be_bytes(data[..2].try_into().unwrap());
                 let address = Ipv4Addr::new(data[2], data[3], data[4], data[5]);
 
                 Some(SocketAddr::V4(SocketAddrV4::new(address, port)))
-            } else if family as i32 == AF_INET6 {
+            } else if family == AF_INET6 {
                 let port = u16::from_be_bytes(data[..2].try_into().unwrap());
                 let flowinfo = u32::from_le_bytes(data[2..6].try_into().unwrap());
                 let address = Ipv6Addr::from_octets(data[6..22].try_into().unwrap());

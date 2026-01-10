@@ -5,4 +5,3 @@ edition = "2024"
 
 [dependencies]
 ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
-msgr2 = { version = "0.1.0", path = "../msgr2" }

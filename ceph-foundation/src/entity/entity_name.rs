@@ -1,4 +1,4 @@
-use crate::EntityType;
+use crate::entity::EntityType;
 
 /// An entity name.
 #[derive(Debug, Clone)]
@@ -9,4 +9,4 @@ pub struct EntityName {
     pub name: String,
 }
 
-ceph_foundation::write_decode_encode!(EntityName = ty as u32 | name as ceph_foundation::WireString);
+crate::write_decode_encode!(EntityName = ty as u32 | name as crate::WireString);

@@ -1,4 +1,4 @@
-use crate::CephFeatureSet;
+use ceph_foundation::CephFeatureSet;
 
 /// A message indicating that the transmitted `Ident`
 /// does not support enough features to continue communication.

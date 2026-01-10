@@ -7,4 +7,3 @@ edition = "2024"
 ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
 crc = "3.4.0"
 crc-catalog = "2.4.0"
-libc = { version = "0.2.180", default-features = false }

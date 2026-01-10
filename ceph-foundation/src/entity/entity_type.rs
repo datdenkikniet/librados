@@ -1,4 +1,4 @@
-use ceph_foundation::DecodeError;
+use crate::DecodeError;
 
 /// The type of entity we are talking to (MON, MDS, OSD, CLIENT or MGR).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +13,24 @@ pub enum EntityType {
     Any,
 }
 
+impl From<&EntityType> for u32 {
+    fn from(value: &EntityType) -> Self {
+        u8::from(value) as u32
+    }
+}
+
+impl From<EntityType> for u32 {
+    fn from(value: EntityType) -> Self {
+        u8::from(value) as u32
+    }
+}
+
+impl From<&EntityType> for u8 {
+    fn from(value: &EntityType) -> Self {
+        u8::from(*value)
+    }
+}
+
 impl From<EntityType> for u8 {
     fn from(value: EntityType) -> Self {
         match value {
@@ -24,24 +42,6 @@ impl From<EntityType> for u8 {
             EntityType::Auth => 0x20,
             EntityType::Any => 0xFF,
         }
-    }
-}
-
-impl From<EntityType> for u32 {
-    fn from(value: EntityType) -> Self {
-        u8::from(value) as u32
-    }
-}
-
-impl From<&EntityType> for u32 {
-    fn from(value: &EntityType) -> Self {
-        From::from(*value)
-    }
-}
-
-impl From<&EntityType> for u8 {
-    fn from(value: &EntityType) -> Self {
-        u8::from(*value)
     }
 }
 

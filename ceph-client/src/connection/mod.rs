@@ -11,8 +11,10 @@ use state::{
     Active, Authenticating, Established, ExchangeHello, ExchangingSignatures, Identifying, Inactive,
 };
 
+use ceph_foundation::entity::EntityType;
+
 use msgr2::{
-    EntityType, Frame, FrameEncryption, Revision, Tag,
+    Frame, FrameEncryption, Revision, Tag,
     frames::{
         AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
         Banner, ClientIdent, ConMode, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck,

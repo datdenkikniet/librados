@@ -4,14 +4,18 @@ use std::{
 };
 
 use msgr2::{
-    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType, Frame, Tag,
+    Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
     wire::{Completed, RxFrame, TxFrame},
 };
 
 use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
-use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString, crypto::Key};
+use ceph_foundation::{
+    CephFeatureSet, Decode, DecodeError, Encode, Timestamp, WireString,
+    crypto::Key,
+    entity::{EntityAddress, EntityAddressType, EntityName, EntityType},
+};
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");

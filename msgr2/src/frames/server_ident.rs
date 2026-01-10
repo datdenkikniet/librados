@@ -1,11 +1,11 @@
-use crate::{CephFeatureSet, EntityAddress};
+use ceph_foundation::{CephFeatureSet, entity::EntityAddress};
 
 /// A server identification message.
 #[derive(Debug, Clone)]
 pub struct ServerIdent {
     /// The entity addresses on which the server is reachable.
     pub addresses: Vec<EntityAddress>,
-    /// The global ID of this entity. Combine this with its [`EntityType`][crate::EntityType]
+    /// The global ID of this entity. Combine this with its [`EntityType`][ceph_foundation::entity::EntityType]
     /// to obtain its name (i.e. `mon.0`).
     pub gid: i64,
     /// The global sequence number of the current connection.

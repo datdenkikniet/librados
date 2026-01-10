@@ -1,6 +1,5 @@
-use ceph_foundation::{Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode, entity::EntityType};
 use cephx::MaybeEncryptedCephXTicketBlob;
-use msgr2::EntityType;
 
 /// A collection of authentication service ticket information.
 #[derive(Debug)]
