@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use nix::libc::{AF_INET, AF_INET6};
+use libc::{AF_INET, AF_INET6};
 
 use crate::{Decode, DecodeError, Encode};
 
