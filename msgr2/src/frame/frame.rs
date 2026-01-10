@@ -37,7 +37,7 @@ impl<'a> Frame<'a> {
         }
 
         if segments.last().map(|v| v.is_empty()).unwrap_or(false) {
-            return Err("Last segment in list was empty.".to_string());
+            return Err("Last segment in list was empty".to_string());
         }
 
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
@@ -200,7 +200,7 @@ impl<'a> Frame<'a> {
 
                     if !trailer[1..].iter().all(|v| *v == 0) {
                         return Err(DecodeError::Custom(
-                            "Trailing epilogue bytes were not zeroed.".to_string(),
+                            "Trailing epilogue bytes were not zeroed".to_string(),
                         ));
                     }
 
@@ -238,7 +238,7 @@ impl<'a> Frame<'a> {
                     }
                 } else if crc != 0 {
                     return Err(DecodeError::Custom(format!(
-                        "Found non-zero CRC (0x{:08X}) for a trailing segment (#{}).",
+                        "Found non-zero CRC (0x{:08X}) for a trailing segment (#{})",
                         crc,
                         idx + 1
                     )));
