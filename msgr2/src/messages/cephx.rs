@@ -1,9 +1,8 @@
 //! CephX messages.
 
-use crate::{
-    CryptoKey, Decode, DecodeError, Encode, EntityName, EntityType, Timestamp,
-    crypto::encode_encrypt,
-};
+use crate::{CryptoKey, EntityName, EntityType, crypto::encode_encrypt};
+
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp};
 
 /// A CephX ticket blob.
 #[derive(Debug, Clone, Default)]
@@ -15,7 +14,7 @@ pub struct CephXTicketBlob {
     pub blob: Vec<u8>,
 }
 
-write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
+ceph_foundation::write_decode_encode!(CephXTicketBlob = const version 1 as u8 | secret_id | blob);
 
 /// A CephX service ticket.
 #[derive(Debug)]
@@ -26,7 +25,7 @@ pub struct CephXServiceTicket {
     pub validity: Timestamp,
 }
 
-write_decode_encode!(CephXServiceTicket = const version 1 as u8 | session_key | validity);
+ceph_foundation::write_decode_encode!(CephXServiceTicket = const version 1 as u8 | session_key | validity);
 
 /// Service ticket information.
 #[derive(Debug)]
@@ -39,7 +38,7 @@ struct CephXServiceTicketInfo {
     pub session_key: CryptoKey,
 }
 
-write_decode_encode!(CephXServiceTicketInfo = const version 1 as u8 | auth_ticket | session_key);
+ceph_foundation::write_decode_encode!(CephXServiceTicketInfo = const version 1 as u8 | auth_ticket | session_key);
 
 /// The type of a CephX message.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,7 +82,7 @@ pub struct CephXResponseHeader {
     pub status: u32,
 }
 
-write_decode_encode!(CephXResponseHeader = ty as u16 | status);
+ceph_foundation::write_decode_encode!(CephXResponseHeader = ty as u16 | status);
 
 /// A CephX message.
 #[derive(Debug)]
@@ -222,7 +221,7 @@ pub struct CephXAuthenticate {
     pub other_keys: u32,
 }
 
-write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys);
+ceph_foundation::write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys);
 
 #[derive(Debug)]
 struct AuthCapsInfo {
@@ -230,7 +229,7 @@ struct AuthCapsInfo {
     pub caps: Vec<u8>,
 }
 
-write_decode_encode!(AuthCapsInfo = const version 1 as u8 | allow_all | caps);
+ceph_foundation::write_decode_encode!(AuthCapsInfo = const version 1 as u8 | allow_all | caps);
 
 #[derive(Debug)]
 struct AuthTicket {
@@ -243,7 +242,7 @@ struct AuthTicket {
     pub flags: u32,
 }
 
-write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | const 0xFFFF_FFFF_FFFF_FFFFu64 as u64 | created | expires | caps | flags);
+ceph_foundation::write_decode_encode!(AuthTicket = const version 2 as u8 | name | global_id | const 0xFFFF_FFFF_FFFF_FFFFu64 as u64 | created | expires | caps | flags);
 
 /// A collection of authentication service ticket information.
 #[derive(Debug)]
@@ -267,7 +266,7 @@ pub struct AuthServiceTicketReply {
     pub extra_service_tickets: ServiceTicketReply,
 }
 
-write_decode_encode!(
+ceph_foundation::write_decode_encode!(
     AuthServiceTicketReply =
         service_ticket_reply | connection_secret | extra_service_tickets as Vec<u8>
 );
@@ -277,7 +276,7 @@ pub struct ServiceTicketReply {
     pub tickets: Vec<AuthServiceTicketInfo>,
 }
 
-write_decode_encode!(ServiceTicketReply = const version 1 as u8 | tickets);
+ceph_foundation::write_decode_encode!(ServiceTicketReply = const version 1 as u8 | tickets);
 
 impl From<&ServiceTicketReply> for Vec<u8> {
     fn from(value: &ServiceTicketReply) -> Self {
@@ -312,7 +311,7 @@ pub struct AuthServiceTicketInfo {
     pub refresh_ticket: MaybeEncryptedCephXTicketBlob,
 }
 
-write_decode_encode!(
+ceph_foundation::write_decode_encode!(
     AuthServiceTicketInfo = ty as u32 | const version 1 as u8 | encrypted_session_ticket | refresh_ticket
 );
 
@@ -364,4 +363,4 @@ pub struct CephXServerChallenge {
     pub challenge: u64,
 }
 
-write_decode_encode!(CephXServerChallenge = const version 1 as u8 | challenge);
+ceph_foundation::write_decode_encode!(CephXServerChallenge = const version 1 as u8 | challenge);

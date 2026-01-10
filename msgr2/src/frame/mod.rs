@@ -14,7 +14,9 @@ pub use preamble::Tag;
 pub use encryption::{DecryptError, EncryptError};
 pub use wire::{Completed, ReadPreamble, RxError, RxFrame, TxError, TxFrame, Unstarted};
 
-use crate::{DecodeError, frame::preamble::SegmentDetail};
+use crate::frame::preamble::SegmentDetail;
+
+use ceph_foundation::DecodeError;
 
 pub const REV1_SECURE_INLINE_SIZE: usize = 48;
 pub const REV1_SECURE_PAD_SIZE: NonZeroUsize = NonZeroUsize::new(16).unwrap();

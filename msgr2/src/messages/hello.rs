@@ -1,4 +1,6 @@
-use crate::{Decode, DecodeError, Encode, EntityType, entity_address::EntityAddress};
+use crate::{EntityType, entity_address::EntityAddress};
+
+use ceph_foundation::{Decode, DecodeError, Encode};
 
 /// A basic hello message, relaying information about
 /// the entity that sends it.
@@ -22,7 +24,7 @@ impl Encode for Hello {
 }
 
 impl Decode<'_> for Hello {
-    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, crate::DecodeError> {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
         let (entity_type, rest) = buffer.split_first().ok_or(DecodeError::NotEnoughData {
             field: Some("entity_type"),
             have: buffer.len(),

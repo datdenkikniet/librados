@@ -1,4 +1,4 @@
-use crate::Timestamp;
+use ceph_foundation::Timestamp;
 
 /// A keepalive message.
 #[derive(Debug, Clone)]
@@ -7,7 +7,7 @@ pub struct Keepalive {
     pub timestamp: Timestamp,
 }
 
-write_decode_encode!(Keepalive = timestamp);
+ceph_foundation::write_decode_encode!(Keepalive = timestamp);
 
 /// A keepalive ack.
 #[derive(Debug, Clone)]
@@ -16,4 +16,4 @@ pub struct KeepaliveAck {
     pub timestamp: Timestamp,
 }
 
-write_decode_encode!(KeepaliveAck = timestamp);
+ceph_foundation::write_decode_encode!(KeepaliveAck = timestamp);

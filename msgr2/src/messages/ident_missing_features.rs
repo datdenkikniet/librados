@@ -8,4 +8,4 @@ pub struct IdentMissingFeatures {
     pub features: CephFeatureSet,
 }
 
-write_decode_encode!(IdentMissingFeatures = features as u64);
+ceph_foundation::write_decode_encode!(IdentMissingFeatures = features as u64);

@@ -7,6 +7,7 @@ edition = "2024"
 aes = "0.8.4"
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
 cbc = "0.1.2"
+ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
 crc = "3.4.0"
 crc-catalog = "2.4.0"
 ctr = "0.9.2"

@@ -23,57 +23,57 @@ macro_rules! write_decode_encode {
     };
 
     (dec($struct:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? } with $($fields:ident)*) => {
-        write_decode_encode!(dec_version_check($struct, $buffer): { const version $val as u8 });
-        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
+        $crate::write_decode_encode!(dec_version_check($struct, $buffer): { const version $val as u8 });
+        $crate::write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
     };
 
     (enc($self:ident, $buffer:ident): { const version $val:literal as u8 $(| $($tt:tt)*)? }) => {
         $buffer.push($val as u8);
-        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
+        $crate::write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
     (dec($struct:ident, $buffer:ident): { const $val:literal as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
         let _value = <$ty>::decode($buffer)?;
-        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
+        $crate::write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)*);
     };
 
     (enc($self:ident, $buffer:ident): { const $val:literal as $ty:ty $(| $($tt:tt)*)? }) => {
         $val.encode($buffer);
-        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
+        $crate::write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
     (dec($struct:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? } with $($fields:ident)*) => {
         let $field = $crate::Decode::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
-        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+        $crate::write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
     };
 
     (enc($self:ident, $buffer:ident): { $field:ident $(| $($tt:tt)*)? }) => {
         $self.$field.encode($buffer);
-        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
+        $crate::write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
     (dec($struct:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? } with $($fields:ident)*) => {
         let $field = <$ty>::decode($buffer).map_err(|e| e.for_field(stringify!($field)))?;
         let $field = TryFrom::try_from($field)?;
-        write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
+        $crate::write_decode_encode!(dec($struct, $buffer): { $($($tt)*)? } with $($fields)* $field);
     };
 
     (enc($self:ident, $buffer:ident): { $field:ident as $ty:ty $(| $($tt:tt)*)? }) => {
         <$ty>::from(&$self.$field).encode($buffer);
-        write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
+        $crate::write_decode_encode!(enc($self, $buffer): { $($($tt)*)? });
     };
 
 
     ($ty:ident<$lt:lifetime> = $($tt:tt)*) => {
         impl<$lt> $crate::Decode<$lt> for $ty<$lt> {
             fn decode(buffer: &mut &$lt [u8]) -> Result<Self, $crate::DecodeError> {
-                write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
+                $crate::write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
             }
         }
 
         impl $crate::Encode for $ty<'_> {
             fn encode(&self, buffer: &mut Vec<u8>) {
-                write_decode_encode!(enc(self, buffer): { $($tt)* });
+                $crate::write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
     };
@@ -81,13 +81,13 @@ macro_rules! write_decode_encode {
     ($ty:ident = $($tt:tt)*) => {
         impl $crate::Decode<'_> for $ty {
             fn decode(buffer: &mut &[u8]) -> Result<Self, $crate::DecodeError> {
-                write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
+                $crate::write_decode_encode!(dec($ty, buffer): { $($tt)* } with);
             }
         }
 
         impl $crate::Encode for $ty {
             fn encode(&self, buffer: &mut Vec<u8>) {
-                write_decode_encode!(enc(self, buffer): { $($tt)* });
+                $crate::write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
     };

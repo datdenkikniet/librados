@@ -2,7 +2,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use libc::{AF_INET, AF_INET6};
 
-use crate::{Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode};
 
 /// An entity address.
 #[derive(Debug, Clone, PartialEq)]

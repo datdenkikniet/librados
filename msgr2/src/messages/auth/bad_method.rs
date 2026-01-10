@@ -14,4 +14,4 @@ pub struct AuthBadMethod {
     pub allowed_modes: Vec<ConMode>,
 }
 
-write_decode_encode!(AuthBadMethod = method | result | allowed_methods | allowed_modes);
+ceph_foundation::write_decode_encode!(AuthBadMethod = method | result | allowed_methods | allowed_modes);

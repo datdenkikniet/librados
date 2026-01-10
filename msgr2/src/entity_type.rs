@@ -1,4 +1,4 @@
-use crate::DecodeError;
+use ceph_foundation::DecodeError;
 
 /// The type of entity we are talking to (MON, MDS, OSD, CLIENT or MGR).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

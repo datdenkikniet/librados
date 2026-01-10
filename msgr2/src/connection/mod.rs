@@ -9,7 +9,7 @@ use state::{
 };
 
 use crate::{
-    CryptoKey, Decode, DecodeError, Encode, EntityType, Timestamp,
+    CryptoKey, EntityType,
     connection::state::Revision,
     crypto::decode_decrypt_enc_bl,
     frame::{Completed, Frame, FrameEncryption, RxFrame, Tag, TxFrame, Unstarted},
@@ -25,6 +25,8 @@ use crate::{
 };
 
 pub use config::*;
+
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {
