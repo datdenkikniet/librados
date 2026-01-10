@@ -105,7 +105,7 @@ impl ClientConnection<Inactive> {
             .extend_from_slice(banner.to_bytes().as_slice());
 
         if banner.required().compression() {
-            return Err("Peer requires compression, which we do not support.".into());
+            return Err("Peer requires compression, which we do not support".into());
         }
 
         let revision = if self.config.support_rev21() && banner.supported().revision_21() {

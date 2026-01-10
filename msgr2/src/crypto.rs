@@ -21,7 +21,7 @@ where
 {
     let mut decrypted = key
         .decrypt(buf)
-        .ok_or_else(|| DecodeError::Custom("Decryption failed.".to_string()))?;
+        .ok_or_else(|| DecodeError::Custom("Decryption failed".to_string()))?;
 
     let buf = &mut decrypted;
 
