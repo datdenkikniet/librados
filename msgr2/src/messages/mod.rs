@@ -2,7 +2,6 @@
 
 pub mod auth;
 mod banner;
-pub mod cephx;
 mod client_ident;
 mod hello;
 mod ident_missing_features;

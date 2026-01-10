@@ -139,12 +139,11 @@ impl<'a> Frame<'a> {
         }
     }
 
-    /// Write this `Frame` to `output`, with preamble, frame data, optional
-    /// epilogue and optional padding.
+    /// > **Note**: this function should, generally, not be used. Use [`Frame::send`]
+    /// instead.
     ///
-    /// You should not send `output` anywhere directly: in order for the frame
-    /// to be encrypted according to the format and current [`FrameEncryption`],
-    /// use [`Frame::send`] instead.
+    /// Write the unencrypted binary representation of this [`Frame`] to `output`,
+    /// with preamble, frame data, optional epilogue and optional padding.
     pub fn write(&self, format: FrameFormat, output: &mut Vec<u8>) {
         let preamble = self.preamble(format);
         preamble.write(output);

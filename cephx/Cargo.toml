@@ -1,9 +1,8 @@
 [package]
-name = "ceph-client"
+name = "cephx"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
-cephx = { version = "0.1.0", path = "../cephx" }
 msgr2 = { version = "0.1.0", path = "../msgr2" }

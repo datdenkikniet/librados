@@ -1,4 +1,5 @@
-use msgr2::{EntityType, messages::cephx::CephXTicketBlob};
+use cephx::CephXTicketBlob;
+use msgr2::EntityType;
 
 #[derive(Debug, Clone)]
 pub struct Config {
