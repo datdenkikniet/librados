@@ -74,6 +74,12 @@ impl Banner {
         output
     }
 
+    /// Check whether the features supported by `self` make
+    /// us compatible with the required features `other`.
+    pub fn compatible(&self, other: &Self) -> bool {
+        self.supported_features.0 | other.required_features.0 == self.supported_features.0
+    }
+
     /// Get the set of supported `msgr2` features.
     pub fn supported(&self) -> &MsgrFeatures {
         &self.supported_features
