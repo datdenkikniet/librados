@@ -215,7 +215,7 @@ pub struct CephXAuthenticate {
     /// An optional old ticket.
     pub old_ticket: CephXTicketBlob,
     /// Other keys to request, i.e. a bitmask of the
-    /// desired [`EntityType`]s.
+    /// desired `EntityType`s.
     // TODO: enum
     pub other_keys: u32,
 }

@@ -46,7 +46,7 @@ impl From<DecodeError> for AuthError {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ClientConnection<T> {
     state: T,
     config: Config,
@@ -62,6 +62,21 @@ impl<T> ClientConnection<T> {
             state: state(self.state),
             config: self.config,
             buffer: self.buffer,
+        }
+    }
+}
+
+impl Clone for ClientConnection<Inactive> {
+    fn clone(&self) -> Self {
+        let mut state = self.state.clone();
+
+        state.rx_buf.clear();
+        state.tx_buf.clear();
+
+        Self {
+            state,
+            config: self.config.clone(),
+            buffer: self.buffer.clone(),
         }
     }
 }
@@ -96,8 +111,8 @@ impl ClientConnection<Inactive> {
 
     /// Receive the provided `banner`.
     ///
-    /// This step consumes the [`Connection`]. To retry connecting, you can
-    /// clone the [`Connection<Inactive>`] and re-attempt to [`recv_banner`](Connection::recv_banner).
+    /// This step consumes the [`ClientConnection`]. To retry connecting, you can
+    /// clone the [`ClientConnection<Inactive>`] and re-attempt to [`recv_banner`](ClientConnection::recv_banner).
     pub fn recv_banner(
         mut self,
         banner: &Banner,
