@@ -120,7 +120,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
         Ok(RxFrame {
             state: ReadPreamble {
                 preamble_data,
-                encryption: encryption,
+                encryption,
                 preamble,
             },
             format,
@@ -142,7 +142,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
     }
 
     pub fn read_preamble(
-        mut self,
+        self,
         read: impl std::io::Read,
     ) -> Result<RxFrame<'buf, ReadPreamble<'enc>>, RxError> {
         // Read pre data
@@ -153,7 +153,7 @@ impl<'buf, 'enc> RxFrame<'buf, Unstarted<'enc>> {
         };
 
         let mut take = read.take(start_rx_bytes as u64);
-        let rx_bytes = take.read_to_end(&mut self.frame_data)?;
+        let rx_bytes = take.read_to_end(self.frame_data)?;
 
         if rx_bytes != start_rx_bytes {
             return Err(RxError::PreambleTruncated);
@@ -228,7 +228,7 @@ impl RxFrame<'_, Completed> {
     }
 
     pub(crate) fn data(&self) -> &[u8] {
-        &self.frame_data
+        self.frame_data
     }
 }
 

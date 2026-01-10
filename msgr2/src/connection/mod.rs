@@ -170,7 +170,7 @@ impl ClientConnection<Authenticating> {
 
         // TODO: this should be random data.
         let client_challenge = 13377;
-        let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, &master_key);
+        let key = CephXAuthenticateKey::compute(challenge.challenge, client_challenge, master_key);
 
         let other_keys = self
             .config
@@ -252,7 +252,7 @@ impl ClientConnection<Authenticating> {
             println!("Additional ticket data: {:?}", info.refresh_ticket);
 
             let service_session_ticket: CephXServiceTicket =
-                decode_decrypt_enc_bl(&mut info.encrypted_session_ticket, &master_key)?;
+                decode_decrypt_enc_bl(&mut info.encrypted_session_ticket, master_key)?;
 
             // TODO: do something with this (refresh?) ticket
             let _service_refresh_ticket = &info.refresh_ticket;

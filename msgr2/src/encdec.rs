@@ -171,7 +171,7 @@ impl<'a> Decode<'a> for WireString<'a> {
         if let Ok(str) = str::from_utf8(slice) {
             Ok(Self(str))
         } else {
-            Err(DecodeError::Custom(format!("Invalid string data.")))
+            Err(DecodeError::Custom("Invalid string data.".to_string()))
         }
     }
 }

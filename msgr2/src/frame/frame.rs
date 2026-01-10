@@ -20,7 +20,7 @@ const ALGO: crc::Algorithm<u32> = crc::Algorithm {
     residue: 0,
 };
 
-const EMPTY: &'static [u8] = &[];
+const EMPTY: &[u8] = &[];
 const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&ALGO);
 
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ impl<'a> Frame<'a> {
         }
 
         if segments.last().map(|v| v.is_empty()).unwrap_or(false) {
-            return Err(format!("Last segment was empty."));
+            return Err("Last segment in list was empty.".to_string());
         }
 
         let valid_segments = NonZeroU8::new(segments.len() as _).unwrap();
@@ -102,10 +102,7 @@ impl<'a> Frame<'a> {
         let mut segments = [EMPTY; 4];
         let mut crc_segment1 = None;
 
-        fn split_segment<'a>(
-            buf: &'a [u8],
-            len: usize,
-        ) -> Result<(&'a [u8], &'a [u8]), DecodeError> {
+        fn split_segment(buf: &[u8], len: usize) -> Result<(&[u8], &[u8]), DecodeError> {
             let err = || DecodeError::NotEnoughData {
                 field: Some("segment"),
                 have: buf.len(),
@@ -230,7 +227,7 @@ impl<'a> Frame<'a> {
             for (idx, crc) in crcs.iter().copied().enumerate() {
                 if idx < preamble.segment_count.get() as usize {
                     let segment = &segments[idx];
-                    let calculated_crc = CRC.checksum(&segment);
+                    let calculated_crc = CRC.checksum(segment);
                     if crc != calculated_crc {
                         return Err(DecodeError::Custom(format!(
                             "Found incorrect CRC 0x{:08X} (expected 0x{:08X}) for segment (#{})",
