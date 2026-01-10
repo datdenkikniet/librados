@@ -12,7 +12,7 @@ use msgr2::{
 
 use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
-use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString, write_decode_encode};
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString};
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");
@@ -197,13 +197,44 @@ fn main() {
     let mut buffer = Vec::new();
     let next = recv_raw(&mut buffer, &mut connection, &mut stream);
     let next = connection.finish_rx_raw(&next).unwrap();
-    println!("Next: {:?}", next);
-    let mut reply_string = next.segments().skip(1).next().unwrap();
+
+    let ping_response = msgr2::frames::Message::decode(&next).unwrap();
+
+    let mut reply_string = ping_response.front().unwrap();
     let reply_string: &str = WireString::decode(&mut reply_string).unwrap().into();
     println!("Ping reply JSON payload: {reply_string}");
 }
 
-pub struct CephMessageHeader2Flags(u8);
+pub struct CephMessageHeader2 {
+    pub seq: u64,
+    pub tid: u64,
+    pub ty: CephMessageType,
+    pub priority: u16,
+    pub version: u16,
+    pub data_pre_padding_len: u32,
+    // TODO: automatically mask against PAGE_MASK
+    pub data_off: u16,
+    pub ack_seq: u64,
+    pub flags: CephMessageHeader2Flags,
+    pub compat_version: u16,
+    pub reserved: u16,
+}
+
+ceph_foundation::write_decode_encode!(
+    CephMessageHeader2 = seq
+        | tid
+        | ty as u16
+        | priority
+        | version
+        | data_pre_padding_len
+        | data_off
+        | ack_seq
+        | flags
+        | compat_version
+        | reserved
+);
+
+pub struct CephMessageHeader2Flags(pub u8);
 
 impl Decode<'_> for CephMessageHeader2Flags {
     fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
@@ -225,35 +256,6 @@ impl Encode for CephMessageHeader2Flags {
         buffer.push(self.0)
     }
 }
-
-struct CephMessageHeader2 {
-    pub seq: u64,
-    pub tid: u64,
-    pub ty: CephMessageType,
-    pub priority: u16,
-    pub version: u16,
-    pub data_pre_padding_len: u32,
-    // TODO: automatically mask against PAGE_MASK
-    pub data_off: u16,
-    pub ack_seq: u64,
-    pub flags: CephMessageHeader2Flags,
-    pub compat_version: u16,
-    pub reserved: u16,
-}
-
-write_decode_encode!(
-    CephMessageHeader2 = seq
-        | tid
-        | ty as u16
-        | priority
-        | version
-        | data_pre_padding_len
-        | data_off
-        | ack_seq
-        | flags
-        | compat_version
-        | reserved
-);
 
 macro_rules! msg_type {
     ($($n:ident = $v:literal,)*)  => {
