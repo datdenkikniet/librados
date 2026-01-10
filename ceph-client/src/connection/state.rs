@@ -1,18 +1,9 @@
 //! The different states that a connection can be in.
 
-use crate::{
-    frame::{FrameEncryption, FrameFormat},
+use msgr2::{
+    frame::{FrameEncryption, FrameFormat, Revision},
     messages::cephx::CephXServiceTicket,
 };
-
-/// The `msgr2` revision a connection has.
-#[derive(Debug, Clone, Copy)]
-pub enum Revision {
-    /// Revision 2.0
-    Rev0,
-    /// Revision 2.1
-    Rev1,
-}
 
 /// A connection state that is capable of receiving [`RxFrame`][0]s and
 /// transmitting [`TxFrame`][1]s

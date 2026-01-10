@@ -219,15 +219,15 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
 }
 
 impl RxFrame<'_, Completed> {
-    pub(crate) fn preamble_data(&self) -> &[u8] {
+    pub fn preamble_data(&self) -> &[u8] {
         self.state.preamble_data.as_ref()
     }
 
-    pub(crate) fn preamble(&self) -> &Preamble {
+    pub fn preamble(&self) -> &Preamble {
         &self.state.preamble
     }
 
-    pub(crate) fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &[u8] {
         self.frame_data
     }
 }

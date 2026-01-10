@@ -4,7 +4,6 @@
 //! [1]: https://ceph.com/en/
 
 mod ceph_features;
-pub mod connection;
 mod crypto;
 mod entity_address;
 mod entity_name;
@@ -14,6 +13,7 @@ mod key;
 pub mod messages;
 
 pub use ceph_features::CephFeatureSet;
+pub use crypto::{decode_decrypt_enc_bl, encode_encrypt, encode_encrypt_enc_bl};
 pub use entity_address::{EntityAddress, EntityAddressType};
 pub use entity_name::EntityName;
 pub use entity_type::EntityType;

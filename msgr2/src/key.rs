@@ -72,7 +72,7 @@ impl CryptoKey {
         }
     }
 
-    pub(crate) fn hmac_sha256(&self, buf: &[u8]) -> [u8; 32] {
+    pub fn hmac_sha256(&self, buf: &[u8]) -> [u8; 32] {
         let mut maybe_expected =
             <hmac::Hmac<sha2::Sha256> as Mac>::new_from_slice(&self.secret).unwrap();
         Mac::update(&mut maybe_expected, buf);
@@ -107,11 +107,7 @@ impl CryptoKey {
         aes.decrypt_padded_mut::<Pkcs7>(data).ok()
     }
 
-    pub(crate) fn decrypt_gcm<'a>(
-        &self,
-        nonce: &[u8; 12],
-        data: &'a mut [u8],
-    ) -> Option<&'a mut [u8]> {
+    pub(crate) fn decrypt_gcm<'a>(&self, nonce: &[u8; 12], data: &'a mut [u8]) -> Option<&'a mut [u8]> {
         use aes::cipher::Unsigned;
 
         const TAG_SIZE: usize = <Aes128Gcm as AeadCore>::TagSize::USIZE;

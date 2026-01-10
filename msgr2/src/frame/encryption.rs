@@ -1,4 +1,4 @@
-use crate::{CryptoKey, connection::state::Revision};
+use crate::{CryptoKey, frame::Revision};
 
 #[derive(Debug)]
 pub struct EncryptError;

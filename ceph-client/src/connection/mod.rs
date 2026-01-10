@@ -8,11 +8,9 @@ use state::{
     Active, Authenticating, Established, ExchangeHello, ExchangingSignatures, Identifying, Inactive,
 };
 
-use crate::{
-    CryptoKey, EntityType,
-    connection::state::Revision,
-    crypto::decode_decrypt_enc_bl,
-    frame::{Completed, Frame, FrameEncryption, RxFrame, Tag, TxFrame, Unstarted},
+use msgr2::{
+    CryptoKey, EntityType, decode_decrypt_enc_bl,
+    frame::{Completed, Frame, FrameEncryption, Revision, RxFrame, Tag, TxFrame, Unstarted},
     messages::{
         Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
         ServerIdent,
@@ -174,7 +172,7 @@ impl ClientConnection<Authenticating> {
         master_key: &CryptoKey,
         challenge: &AuthReplyMore,
     ) -> TxFrame<'me> {
-        use crate::messages::cephx::*;
+        use msgr2::messages::cephx::*;
 
         let challenge = CephXServerChallenge::decode(&mut challenge.payload.as_slice()).unwrap();
 
@@ -433,13 +431,11 @@ where
 
     fn tx_frame<'me>(&'me mut self, frame: &Frame<'_>) -> TxFrame<'me> {
         self.buffer.clear();
-        frame.write(self.state.format(), &mut self.buffer);
-
-        TxFrame {
-            preamble: frame.preamble(self.state.format()),
-            enc: self.state.encryption_mut(),
-            frame_data: &mut self.buffer,
-        }
+        frame.send(
+            self.state.format(),
+            self.state.encryption_mut(),
+            &mut self.buffer,
+        )
     }
 
     pub fn start_rx<'enc, 'buf>(

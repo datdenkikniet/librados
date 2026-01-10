@@ -5,11 +5,9 @@ mod wire;
 
 use std::num::{NonZeroU8, NonZeroUsize};
 
-pub(crate) use encryption::FrameEncryption;
-pub(crate) use epilogue::Epilogue;
-pub(crate) use preamble::Preamble;
-
-pub use preamble::Tag;
+pub use encryption::FrameEncryption;
+pub use epilogue::Epilogue;
+pub use preamble::{Preamble, Tag};
 
 pub use encryption::{DecryptError, EncryptError};
 pub use wire::{Completed, ReadPreamble, RxError, RxFrame, TxError, TxFrame, Unstarted};
@@ -46,6 +44,22 @@ impl FrameFormat {
             FrameFormat::Rev1Secure => REV1_SECURE_PAD_SIZE,
         }
     }
+
+    pub fn revision(&self) -> Revision {
+        match self {
+            FrameFormat::Rev0Crc | Self::Rev0Secure => Revision::Rev0,
+            FrameFormat::Rev1Crc | Self::Rev1Secure => Revision::Rev1,
+        }
+    }
+}
+
+/// The `msgr2` revision a connection has.
+#[derive(Debug, Clone, Copy)]
+pub enum Revision {
+    /// Revision 2.0
+    Rev0,
+    /// Revision 2.1
+    Rev1,
 }
 
 const ALGO: crc::Algorithm<u32> = crc::Algorithm {
@@ -70,6 +84,21 @@ pub struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
+    pub fn send<'frame>(
+        &self,
+        format: FrameFormat,
+        encryption: &'frame mut FrameEncryption,
+        buffer: &'frame mut Vec<u8>,
+    ) -> TxFrame<'frame> {
+        self.write(format, buffer);
+
+        TxFrame {
+            preamble: self.preamble(format),
+            enc: encryption,
+            frame_data: buffer,
+        }
+    }
+
     pub fn new(tag: Tag, segments: &[&'a [u8]]) -> Result<Self, String> {
         if segments.is_empty() || segments.len() > 4 {
             return Err("Invalid amount of segments".to_string());
@@ -110,6 +139,12 @@ impl<'a> Frame<'a> {
         }
     }
 
+    /// Write this `Frame` to `output`, with preamble, frame data, optional
+    /// epilogue and optional padding.
+    ///
+    /// You should not send `output` anywhere directly: in order for the frame
+    /// to be encrypted according to the format and current [`FrameEncryption`],
+    /// use [`Frame::send`] instead.
     pub fn write(&self, format: FrameFormat, output: &mut Vec<u8>) {
         let preamble = self.preamble(format);
         preamble.write(output);
@@ -135,7 +170,7 @@ impl<'a> Frame<'a> {
         preamble.write_epilogue(crcs.as_slice(), output);
     }
 
-    pub(crate) fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
+    pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
         let mut trailer = data;
 
         let mut segments = [EMPTY; 4];
