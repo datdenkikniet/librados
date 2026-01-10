@@ -65,6 +65,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceph-client"
+version = "0.1.0"
+dependencies = [
+ "ceph-foundation",
+ "msgr2",
+]
+
+[[package]]
 name = "ceph-foundation"
 version = "0.1.0"
 
