@@ -6,8 +6,8 @@ use msgr2::frame::{FrameEncryption, FrameFormat, Revision};
 /// A connection state that is capable of receiving [`RxFrame`][0]s and
 /// transmitting [`TxFrame`][1]s
 ///
-/// [0]: crate::frame::RxFrame
-/// [1]: crate::frame::TxFrame
+/// [0]: msgr2::frame::RxFrame
+/// [1]: msgr2::frame::TxFrame
 #[doc(hidden)]
 pub trait Established {
     /// Get the format of frames exchanged over this connection.
@@ -29,7 +29,7 @@ pub struct Inactive {
 }
 
 /// A connection where the server-client pair is exchanging
-/// [`Hello`](crate::messages::Hello) messages.
+/// [`Hello`](msgr2::messages::Hello) messages.
 #[derive(Debug)]
 pub struct ExchangeHello {
     pub(crate) revision: Revision,
@@ -60,8 +60,8 @@ pub struct ExchangingSignatures {
 }
 
 /// A connection where the clien-server pair is exchanging
-/// [`ClientIdent`](crate::messages::ClientIdent) and
-/// [`ServerIdent`](crate::messages::ServerIdent) messages.
+/// [`ClientIdent`](msgr2::messages::ClientIdent) and
+/// [`ServerIdent`](msgr2::messages::ServerIdent) messages.
 #[derive(Debug)]
 pub struct Identifying {
     pub(crate) revision: Revision,
