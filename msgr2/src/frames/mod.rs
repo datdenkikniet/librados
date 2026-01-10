@@ -6,6 +6,7 @@ mod client_ident;
 mod hello;
 mod ident_missing_features;
 mod keepalive;
+mod message;
 mod server_ident;
 
 pub use auth::{
@@ -17,6 +18,7 @@ pub use client_ident::ClientIdent;
 pub use hello::Hello;
 pub use ident_missing_features::IdentMissingFeatures;
 pub use keepalive::{Keepalive, KeepaliveAck};
+pub use message::Message;
 pub use server_ident::ServerIdent;
 
 use ceph_foundation::{Decode, DecodeError, Encode};
