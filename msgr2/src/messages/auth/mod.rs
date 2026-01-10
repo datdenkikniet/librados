@@ -15,7 +15,7 @@ pub use request::{
 };
 pub use signature::AuthSignature;
 
-use crate::{Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode};
 
 /// An authentication method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

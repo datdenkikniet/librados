@@ -9,4 +9,4 @@ pub struct EntityName {
     pub name: String,
 }
 
-write_decode_encode!(EntityName = ty as u32 | name as crate::WireString);
+ceph_foundation::write_decode_encode!(EntityName = ty as u32 | name as ceph_foundation::WireString);

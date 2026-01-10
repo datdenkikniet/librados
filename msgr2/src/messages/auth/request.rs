@@ -1,5 +1,7 @@
+use ceph_foundation::Encode;
+
 use crate::{
-    Encode, EntityName,
+    EntityName,
     messages::auth::{AuthMethod, ConMode},
 };
 
@@ -37,7 +39,7 @@ impl AuthRequest {
     }
 }
 
-write_decode_encode!(AuthRequest = method | preferred_modes | auth_payload);
+ceph_foundation::write_decode_encode!(AuthRequest = method | preferred_modes | auth_payload);
 
 /// No authentication.
 #[derive(Debug, Clone)]
@@ -50,7 +52,7 @@ pub struct AuthMethodNone {
 
 impl crate::sealed::Sealed for AuthMethodNone {}
 
-write_decode_encode!(AuthMethodNone = const version 1 as u8 | name | global_id);
+ceph_foundation::write_decode_encode!(AuthMethodNone = const version 1 as u8 | name | global_id);
 
 impl AuthRequestPayload for AuthMethodNone {
     const METHOD: AuthMethod = AuthMethod::None;
@@ -70,7 +72,7 @@ pub struct AuthMethodCephX {
 
 impl crate::sealed::Sealed for AuthMethodCephX {}
 
-write_decode_encode!(AuthMethodCephX = const version 10 as u8 | name | global_id);
+ceph_foundation::write_decode_encode!(AuthMethodCephX = const version 10 as u8 | name | global_id);
 
 impl AuthRequestPayload for AuthMethodCephX {
     const METHOD: AuthMethod = AuthMethod::CephX;
@@ -83,4 +85,4 @@ pub struct AuthRequestMore {
     pub payload: Vec<u8>,
 }
 
-write_decode_encode!(AuthRequestMore = payload);
+ceph_foundation::write_decode_encode!(AuthRequestMore = payload);

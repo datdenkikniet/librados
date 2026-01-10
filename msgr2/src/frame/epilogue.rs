@@ -1,4 +1,6 @@
-use crate::{DecodeError, frame::FrameFormat};
+use crate::frame::FrameFormat;
+
+use ceph_foundation::DecodeError;
 
 #[derive(Debug, Clone)]
 pub struct Epilogue<'a> {

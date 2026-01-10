@@ -16,4 +16,4 @@ pub struct AuthSignature {
     pub sha256_hmac: [u8; 32],
 }
 
-write_decode_encode!(AuthSignature = sha256_hmac);
+ceph_foundation::write_decode_encode!(AuthSignature = sha256_hmac);

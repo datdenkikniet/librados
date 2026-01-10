@@ -1,4 +1,6 @@
-use crate::{CryptoKey, Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode};
+
+use crate::CryptoKey;
 
 pub const AUTH_MAGIC: u64 = 0xff009cad8826aa55;
 

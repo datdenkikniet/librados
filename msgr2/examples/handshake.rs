@@ -4,16 +4,16 @@ use std::{
 };
 
 use msgr2::{
-    CephFeatureSet, CryptoKey, Decode, DecodeError, Encode, EntityAddress, EntityAddressType,
-    EntityName, EntityType, Timestamp, WireString,
+    CephFeatureSet, CryptoKey, EntityAddress, EntityAddressType, EntityName, EntityType,
     connection::{ClientConnection, Config, Message, state::Established},
     frame::{Completed, Frame, RxFrame, Tag, TxFrame},
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{AuthMethodCephX, AuthRequest, ConMode},
     },
-    write_decode_encode,
 };
+
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString, write_decode_encode};
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");
@@ -207,7 +207,7 @@ fn main() {
 pub struct CephMessageHeader2Flags(u8);
 
 impl Decode<'_> for CephMessageHeader2Flags {
-    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, msgr2::DecodeError> {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
         let (value, rest) = buffer
             .split_first()
             .ok_or_else(|| DecodeError::NotEnoughData {

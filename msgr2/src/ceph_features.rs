@@ -1,4 +1,4 @@
-use crate::{DecodeError, Encode};
+use ceph_foundation::{DecodeError, Encode};
 
 /// A ceph feature set, describing which features an entity
 /// supports.

@@ -20,4 +20,4 @@ pub struct ServerIdent {
     pub cookie: u64,
 }
 
-write_decode_encode!(ServerIdent = const version 2 as u8 | addresses | gid | global_seq | supported_features as u64 | required_features as u64 | flags | cookie);
+ceph_foundation::write_decode_encode!(ServerIdent = const version 2 as u8 | addresses | gid | global_seq | supported_features as u64 | required_features as u64 | flags | cookie);

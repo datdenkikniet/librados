@@ -5,7 +5,7 @@ use hmac::{Mac, digest::FixedOutput};
 pub const CEPH_AES_IV: &[u8; 16] = b"cephsageyudagreg";
 pub const AES_GCM_SIG_SIZE: usize = 16;
 
-use crate::{Decode, DecodeError, Encode, Timestamp};
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp};
 
 /// A cryptographic key.
 // TODO: zeroize...
