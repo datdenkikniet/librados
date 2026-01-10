@@ -1,9 +1,6 @@
-use ceph_foundation::Encode;
+use ceph_foundation::{Encode, entity::EntityName};
 
-use crate::{
-    EntityName,
-    frames::auth::{AuthMethod, ConMode},
-};
+use crate::frames::auth::{AuthMethod, ConMode};
 
 /// An authentication request payload.
 pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {

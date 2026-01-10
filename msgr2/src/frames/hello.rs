@@ -1,6 +1,7 @@
-use crate::{EntityType, entity_address::EntityAddress};
-
-use ceph_foundation::{Decode, DecodeError, Encode};
+use ceph_foundation::{
+    Decode, DecodeError, Encode,
+    entity::{EntityAddress, EntityType},
+};
 
 /// A basic hello message, relaying information about
 /// the entity that sends it.
@@ -61,7 +62,7 @@ fn round_trip() {
     let hello = Hello {
         entity_type: EntityType::Client,
         peer_address: EntityAddress {
-            ty: crate::entity_address::EntityAddressType::Msgr2,
+            ty: ceph_foundation::entity::EntityAddressType::Msgr2,
             nonce: 1337,
             address: Some(SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::new(10, 0, 1, 5),

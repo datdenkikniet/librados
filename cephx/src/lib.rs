@@ -1,10 +1,9 @@
 //! CephX messages.
 
-use msgr2::EntityName;
-
 use ceph_foundation::{
     Decode, DecodeError, Encode, Timestamp,
     crypto::{Key, encode_encrypt},
+    entity::EntityName,
 };
 
 /// A CephX ticket blob.

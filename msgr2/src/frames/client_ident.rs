@@ -1,4 +1,4 @@
-use crate::{CephFeatureSet, entity_address::EntityAddress};
+use ceph_foundation::{CephFeatureSet, entity::EntityAddress};
 
 /// A client identification message.
 #[derive(Clone, Debug)]

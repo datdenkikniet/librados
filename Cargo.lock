@@ -89,7 +89,6 @@ name = "cephx"
 version = "0.1.0"
 dependencies = [
  "ceph-foundation",
- "msgr2",
 ]
 
 [[package]]
@@ -214,7 +213,6 @@ dependencies = [
  "ceph-foundation",
  "crc",
  "crc-catalog",
- "libc",
 ]
 
 [[package]]
