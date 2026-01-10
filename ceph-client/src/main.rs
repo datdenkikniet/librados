@@ -4,12 +4,10 @@ use std::{
 };
 
 use msgr2::{
-    CephFeatureSet, CryptoKey, EntityAddress, EntityAddressType, EntityName, EntityType,
-    frame::{Completed, Frame, RxFrame, Tag, TxFrame},
-    messages::{
-        Banner, ClientIdent, Hello, Keepalive,
-        auth::{AuthMethodCephX, AuthRequest, ConMode},
-    },
+    CephFeatureSet, CryptoKey, EntityAddress, EntityAddressType, EntityName, EntityType, Frame,
+    Tag,
+    frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
+    wire::{Completed, RxFrame, TxFrame},
 };
 
 use ceph_client::connection::{ClientConnection, Config, Message, state::Established};

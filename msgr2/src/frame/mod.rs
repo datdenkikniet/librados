@@ -1,7 +1,7 @@
 mod encryption;
 mod epilogue;
 mod preamble;
-mod wire;
+pub mod wire;
 
 use std::num::{NonZeroU8, NonZeroUsize};
 
@@ -9,10 +9,7 @@ pub use encryption::FrameEncryption;
 pub use epilogue::Epilogue;
 pub use preamble::{Preamble, Tag};
 
-pub use encryption::{DecryptError, EncryptError};
-pub use wire::{Completed, ReadPreamble, RxError, RxFrame, TxError, TxFrame, Unstarted};
-
-use crate::frame::preamble::SegmentDetail;
+use crate::{frame::preamble::SegmentDetail, wire::TxFrame};
 
 use ceph_foundation::DecodeError;
 

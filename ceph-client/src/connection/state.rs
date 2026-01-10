@@ -1,7 +1,7 @@
 //! The different states that a connection can be in.
 
 use cephx::CephXServiceTicket;
-use msgr2::frame::{FrameEncryption, FrameFormat, Revision};
+use msgr2::{FrameEncryption, FrameFormat, Revision};
 
 /// A connection state that is capable of receiving [`RxFrame`][0]s and
 /// transmitting [`TxFrame`][1]s

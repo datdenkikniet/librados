@@ -1,4 +1,4 @@
-use crate::messages::MsgrFeatures;
+use crate::frames::MsgrFeatures;
 
 /// The initial connection banner.
 #[derive(Clone, Copy, Debug)]

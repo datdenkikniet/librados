@@ -12,16 +12,13 @@ use state::{
 };
 
 use msgr2::{
-    CryptoKey, EntityType, decode_decrypt_enc_bl,
-    frame::{Completed, Frame, FrameEncryption, Revision, RxFrame, Tag, TxFrame, Unstarted},
-    messages::{
-        Banner, ClientIdent, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck, MsgrFeatures,
-        ServerIdent,
-        auth::{
-            AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
-            ConMode,
-        },
+    CryptoKey, EntityType, Frame, FrameEncryption, Revision, Tag, decode_decrypt_enc_bl,
+    frames::{
+        AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
+        Banner, ClientIdent, ConMode, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck,
+        MsgrFeatures, ServerIdent,
     },
+    wire::{Completed, RxFrame, TxFrame, Unstarted},
 };
 
 pub use config::*;
@@ -66,21 +63,6 @@ impl<T> ClientConnection<T> {
     }
 }
 
-impl Clone for ClientConnection<Inactive> {
-    fn clone(&self) -> Self {
-        let mut state = self.state.clone();
-
-        state.rx_buf.clear();
-        state.tx_buf.clear();
-
-        Self {
-            state,
-            config: self.config.clone(),
-            buffer: self.buffer.clone(),
-        }
-    }
-}
-
 impl ClientConnection<Inactive> {
     pub fn new(config: Config) -> Self {
         let mut me = Self {
@@ -111,8 +93,8 @@ impl ClientConnection<Inactive> {
 
     /// Receive the provided `banner`.
     ///
-    /// This step consumes the [`ClientConnection`]. To retry connecting, you can
-    /// clone the [`ClientConnection<Inactive>`] and re-attempt to [`recv_banner`](ClientConnection::recv_banner).
+    /// This step consumes the [`ClientConnection`]. To retry connecting, you should
+    /// create a new [`ClientConnection<Inactive>`] with the same [`Confi.
     pub fn recv_banner(
         mut self,
         banner: &Banner,
