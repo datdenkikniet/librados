@@ -26,7 +26,7 @@ mod sealed {
 }
 
 /// A UTC timestamp.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Timestamp {
     /// The amount of seconds since the UTC epoch.
     pub tv_sec: u32,
