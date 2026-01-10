@@ -1,9 +1,12 @@
 //! A sans-IO implementation of a `msgr2` connection, with support
 //! for authentication-less and CephX connections.
 
+mod auth;
 mod config;
 pub mod state;
 
+use ::cephx::{CephXMessage, CephXMessageType, CephXServiceTicket};
+use auth::AuthServiceTicketReply;
 use state::{
     Active, Authenticating, Established, ExchangeHello, ExchangingSignatures, Identifying, Inactive,
 };
@@ -18,7 +21,6 @@ use msgr2::{
             AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
             ConMode,
         },
-        cephx::{AuthServiceTicketReply, CephXMessage, CephXMessageType, CephXServiceTicket},
     },
 };
 
@@ -172,7 +174,7 @@ impl ClientConnection<Authenticating> {
         master_key: &CryptoKey,
         challenge: &AuthReplyMore,
     ) -> TxFrame<'me> {
-        use msgr2::messages::cephx::*;
+        use ::cephx::*;
 
         let challenge = CephXServerChallenge::decode(&mut challenge.payload.as_slice()).unwrap();
 
