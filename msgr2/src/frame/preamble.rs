@@ -82,7 +82,7 @@ impl TryFrom<u8> for Tag {
 }
 
 #[derive(Debug)]
-pub(crate) struct Preamble {
+pub struct Preamble {
     pub format: FrameFormat,
     pub tag: Tag,
     pub segment_count: NonZeroU8,
@@ -198,7 +198,9 @@ impl Preamble {
         };
     }
 
-    pub fn data_and_epilogue_segments<'a>(&self) -> impl Iterator<Item = usize> + 'a + core::fmt::Debug {
+    pub fn data_and_epilogue_segments<'a>(
+        &self,
+    ) -> impl Iterator<Item = usize> + 'a + core::fmt::Debug {
         let expected_data = match self.format {
             FrameFormat::Rev0Crc => {
                 let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();
@@ -254,7 +256,7 @@ impl Preamble {
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub(crate) struct SegmentDetail {
+pub struct SegmentDetail {
     pub length: u32,
     pub alignment: u16,
 }
@@ -279,7 +281,6 @@ impl SegmentDetail {
         self.length as _
     }
 
-    #[expect(unused)]
     pub fn alignment(&self) -> usize {
         self.alignment as _
     }

@@ -5,13 +5,14 @@ use std::{
 
 use msgr2::{
     CephFeatureSet, CryptoKey, EntityAddress, EntityAddressType, EntityName, EntityType,
-    connection::{ClientConnection, Config, Message, state::Established},
     frame::{Completed, Frame, RxFrame, Tag, TxFrame},
     messages::{
         Banner, ClientIdent, Hello, Keepalive,
         auth::{AuthMethodCephX, AuthRequest, ConMode},
     },
 };
+
+use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
 use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString, write_decode_encode};
 
@@ -49,7 +50,7 @@ fn main() {
 
     let mut config = Config::new(true);
     config.request_ticket_for(EntityType::Osd);
-    let connection = msgr2::connection::ClientConnection::new(config);
+    let connection = ceph_client::connection::ClientConnection::new(config);
 
     let mut banner = connection.banner().to_bytes();
 

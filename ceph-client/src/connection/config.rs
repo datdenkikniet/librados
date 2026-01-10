@@ -1,4 +1,4 @@
-use crate::{EntityType, messages::cephx::CephXTicketBlob};
+use msgr2::{EntityType, messages::cephx::CephXTicketBlob};
 
 #[derive(Debug, Clone)]
 pub struct Config {
