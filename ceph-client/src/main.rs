@@ -4,15 +4,14 @@ use std::{
 };
 
 use msgr2::{
-    CephFeatureSet, CryptoKey, EntityAddress, EntityAddressType, EntityName, EntityType, Frame,
-    Tag,
+    CephFeatureSet, EntityAddress, EntityAddressType, EntityName, EntityType, Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
     wire::{Completed, RxFrame, TxFrame},
 };
 
 use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
-use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString};
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, WireString, crypto::Key};
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");
@@ -43,7 +42,7 @@ where
 }
 
 fn main() {
-    let master_key = CryptoKey::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
+    let master_key = Key::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
     let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
 
     let mut config = Config::new(true);

@@ -76,6 +76,13 @@ dependencies = [
 [[package]]
 name = "ceph-foundation"
 version = "0.1.0"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "cbc",
+ "hmac",
+ "sha2",
+]
 
 [[package]]
 name = "cephx"
@@ -204,16 +211,10 @@ checksum = "bcc35a38544a891a5f7c865aca548a982ccb3b8650a5b06d0fd33a10283c56fc"
 name = "msgr2"
 version = "0.1.0"
 dependencies = [
- "aes",
- "aes-gcm",
- "cbc",
  "ceph-foundation",
  "crc",
  "crc-catalog",
- "ctr",
- "hmac",
  "libc",
- "sha2",
 ]
 
 [[package]]

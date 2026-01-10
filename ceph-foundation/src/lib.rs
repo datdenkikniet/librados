@@ -1,3 +1,4 @@
+pub mod crypto;
 mod encdec;
 
 pub use encdec::{Decode, DecodeError, Encode, WireString};

@@ -1,4 +1,6 @@
-use crate::{CryptoKey, frame::Revision};
+use ceph_foundation::crypto::Key;
+
+use crate::frame::Revision;
 
 #[derive(Debug)]
 pub struct EncryptError;
@@ -24,7 +26,7 @@ impl FrameEncryption {
         }
     }
 
-    pub fn session_key(&self) -> Option<&CryptoKey> {
+    pub fn session_key(&self) -> Option<&Key> {
         match &self.inner {
             EncryptionInner::None => None,
             EncryptionInner::CryptoKey { key, .. } => Some(key),
@@ -38,7 +40,7 @@ impl FrameEncryption {
     pub fn set_secret_data(
         &mut self,
         revision: Revision,
-        key: CryptoKey,
+        key: Key,
         rx_nonce: [u8; 12],
         tx_nonce: [u8; 12],
     ) {
@@ -90,7 +92,7 @@ impl FrameEncryption {
 enum EncryptionInner {
     None,
     CryptoKey {
-        key: CryptoKey,
+        key: Key,
         rx_nonce: Nonce,
         tx_nonce: Nonce,
         revision: Revision,

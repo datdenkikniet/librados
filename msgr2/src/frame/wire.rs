@@ -1,11 +1,10 @@
 use std::io::Read;
 
-use crate::{
-    frame::{
-        FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE,
-        encryption::FrameEncryption,
-    },
-    key::AES_GCM_SIG_SIZE,
+use ceph_foundation::crypto::AES_GCM_SIG_SIZE;
+
+use crate::frame::{
+    FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE,
+    encryption::FrameEncryption,
 };
 
 fn start_bytes(format: FrameFormat) -> usize {
