@@ -1,8 +1,11 @@
 //! CephX messages.
 
-use msgr2::{CryptoKey, EntityName, encode_encrypt};
+use msgr2::EntityName;
 
-use ceph_foundation::{Decode, DecodeError, Encode, Timestamp};
+use ceph_foundation::{
+    Decode, DecodeError, Encode, Timestamp,
+    crypto::{Key, encode_encrypt},
+};
 
 /// A CephX ticket blob.
 #[derive(Debug, Clone, Default)]
@@ -20,7 +23,7 @@ ceph_foundation::write_decode_encode!(CephXTicketBlob = const version 1 as u8 | 
 #[derive(Debug)]
 pub struct CephXServiceTicket {
     /// The session key used for this ticket.
-    pub session_key: CryptoKey,
+    pub session_key: Key,
     /// The duration for which this ticket is valid.
     pub validity: Timestamp,
 }
@@ -34,7 +37,7 @@ pub struct CephXServiceTicketInfo {
     /// information.
     pub auth_ticket: AuthTicket,
     /// The session key used for this ticket.
-    pub session_key: CryptoKey,
+    pub session_key: Key,
 }
 
 ceph_foundation::write_decode_encode!(CephXServiceTicketInfo = const version 1 as u8 | auth_ticket | session_key);
@@ -170,7 +173,7 @@ impl CephXAuthenticateKey {
     pub fn compute(
         server_challenge: u64,
         client_challenge: u64,
-        key: &CryptoKey,
+        key: &Key,
     ) -> CephXAuthenticateKey {
         struct ChallengeBlob {
             server_challenge: u64,

@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes = "0.8.4"
+aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
+cbc = "0.1.2"
+hmac = "0.12.1"
+sha2 = { version = "0.10.9", default-features = false }

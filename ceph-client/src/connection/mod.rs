@@ -12,7 +12,7 @@ use state::{
 };
 
 use msgr2::{
-    CryptoKey, EntityType, Frame, FrameEncryption, Revision, Tag, decode_decrypt_enc_bl,
+    EntityType, Frame, FrameEncryption, Revision, Tag,
     frames::{
         AuthBadMethod, AuthDone, AuthReplyMore, AuthRequest, AuthRequestMore, AuthSignature,
         Banner, ClientIdent, ConMode, Hello, IdentMissingFeatures, Keepalive, KeepaliveAck,
@@ -23,7 +23,10 @@ use msgr2::{
 
 pub use config::*;
 
-use ceph_foundation::{Decode, DecodeError, Encode, Timestamp};
+use ceph_foundation::{
+    Decode, DecodeError, Encode, Timestamp,
+    crypto::{Key, decode_decrypt_enc_bl},
+};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {
@@ -168,7 +171,7 @@ impl ClientConnection<Authenticating> {
 
     pub fn recv_cephx_server_challenge<'me>(
         &'me mut self,
-        master_key: &CryptoKey,
+        master_key: &Key,
         challenge: &AuthReplyMore,
     ) -> TxFrame<'me> {
         use ::cephx::*;
@@ -233,7 +236,7 @@ impl ClientConnection<Authenticating> {
 
     pub fn recv_cephx_done(
         mut self,
-        master_key: &CryptoKey,
+        master_key: &Key,
         done: &AuthDone,
     ) -> Result<ClientConnection<ExchangingSignatures>, AuthError> {
         // TODO: save/use global ID somewhere?
@@ -301,7 +304,7 @@ impl ClientConnection<Authenticating> {
             let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
             let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
 
-            let encryption_key = CryptoKey::new(
+            let encryption_key = Key::new(
                 // TODO: probably best not to have this creation time be not completely BS
                 Timestamp {
                     tv_sec: 0,
