@@ -4,8 +4,13 @@ use ceph_foundation::{CephFeatureSet, entity::EntityAddress};
 #[derive(Debug, Clone)]
 pub struct ServerIdent {
     /// The entity addresses on which the server is reachable.
+    ///
+    // NOTE: this is technically an `entity_addrvec_t`, but
+    // this library does not aim to support ceph versions
+    // older than jewel, so we need not support it.
     pub addresses: Vec<EntityAddress>,
-    /// The global ID of this entity. Combine this with its [`EntityType`][ceph_foundation::entity::EntityType]
+    /// The global ID of this entity. Combine this with
+    /// its [`EntityType`][ceph_foundation::entity::EntityType]
     /// to obtain its name (i.e. `mon.0`).
     pub gid: i64,
     /// The global sequence number of the current connection.
@@ -20,4 +25,4 @@ pub struct ServerIdent {
     pub cookie: u64,
 }
 
-ceph_foundation::write_decode_encode!(ServerIdent = const version 2 as u8 | addresses | gid | global_seq | supported_features as u64 | required_features as u64 | flags | cookie);
+ceph_foundation::write_decode_encode!(ServerIdent = /* version for entity_addrvec_t */ const version 2 as u8 | addresses | gid | global_seq | supported_features as u64 | required_features as u64 | flags | cookie);
