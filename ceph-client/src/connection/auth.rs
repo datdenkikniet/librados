@@ -45,7 +45,13 @@ impl TryFrom<Vec<u8>> for ServiceTicketReply {
     type Error = DecodeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        Decode::decode(&mut value.as_ref())
+        if value.is_empty() {
+            Ok(Self {
+                tickets: Vec::new(),
+            })
+        } else {
+            Decode::decode(&mut value.as_ref())
+        }
     }
 }
 
