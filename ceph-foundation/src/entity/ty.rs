@@ -1,7 +1,7 @@
 use crate::DecodeError;
 
 /// The type of entity we are talking to (MON, MDS, OSD, CLIENT or MGR).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[expect(missing_docs)]
 pub enum EntityType {
     Mon,

@@ -188,12 +188,13 @@ impl ClientConnection<Authenticating> {
             .config
             .tickets_for()
             .iter()
-            // other_keys must be non-zero.
-            //
+            // other_keys must be non-zero, otherwise we crash the MON.
             // For now: always request ticket for auth.
             // for non-auth servers.
+            // See: https://tracker.ceph.com/issues/74297
             .chain([EntityType::Auth].iter())
-            .fold(0u32, |acc, v| acc | u8::from(*v) as u32);
+            .copied()
+            .collect();
 
         let old_ticket = self.config.old_ticket().unwrap_or_default();
 
