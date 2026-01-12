@@ -243,16 +243,16 @@ impl ClientConnection<Authenticating> {
         done: &AuthDone,
     ) -> Result<ClientConnection<ExchangingSignatures>, AuthError> {
         // TODO: save/use global ID somewhere?
-        let auth_done = CephXMessage::decode(&mut done.auth_payload.as_slice())?;
+        let cephx = CephXMessage::decode(&mut done.auth_payload.as_slice())?;
 
-        if auth_done.ty() != CephXMessageType::GetAuthSessionKey {
+        if cephx.ty() != CephXMessageType::GetAuthSessionKey {
             return Err(AuthError::UnexpectedCephXMessage {
                 expected: CephXMessageType::GetAuthSessionKey,
-                got: auth_done.ty(),
+                got: cephx.ty(),
             });
         }
 
-        let mut tickets = auth_done.payload();
+        let mut tickets = cephx.payload();
 
         let service_ticket_infos = AuthServiceTicketReply::decode(&mut tickets)?;
         assert!(tickets.is_empty());
