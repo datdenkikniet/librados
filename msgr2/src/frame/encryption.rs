@@ -109,7 +109,7 @@ impl std::fmt::Debug for EncryptionInner {
                 tx_nonce: _,
                 revision,
             } => f
-                .debug_struct("CryptoKey")
+                .debug_struct("Key")
                 .field("key", key)
                 .field("rx_nonce", &"<12 secret bytes>")
                 .field("tx_nonce", &"<12 secret bytes>")
