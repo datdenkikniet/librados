@@ -1,9 +1,11 @@
 //! CephX messages.
 
+use std::collections::HashSet;
+
 use ceph_foundation::{
     Decode, DecodeError, Encode, Timestamp,
     crypto::{Key, encode_encrypt},
-    entity::EntityName,
+    entity::{EntityName, EntityType},
 };
 
 /// A CephX ticket blob.
@@ -216,13 +218,43 @@ pub struct CephXAuthenticate {
     pub key: CephXAuthenticateKey,
     /// An optional old ticket.
     pub old_ticket: CephXTicketBlob,
-    /// Other keys to request, i.e. a bitmask of the
-    /// desired `EntityType`s.
-    // TODO: enum
-    pub other_keys: u32,
+    /// Other keys to request.
+    pub other_keys: HashSet<EntityType>,
 }
 
-ceph_foundation::write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys);
+ceph_foundation::write_decode_encode!(CephXAuthenticate = const version 3 as u8 | client_challenge | key as u64 | old_ticket | other_keys as EntitySet);
+
+struct EntitySet {
+    value: u32,
+}
+
+ceph_foundation::write_decode_encode!(EntitySet = value);
+
+impl From<&HashSet<EntityType>> for EntitySet {
+    fn from(value: &HashSet<EntityType>) -> Self {
+        let value = value.iter().fold(0u32, |a, v| a | a | u32::from(v));
+        Self { value }
+    }
+}
+
+impl TryFrom<EntitySet> for HashSet<EntityType> {
+    type Error = DecodeError;
+
+    fn try_from(value: EntitySet) -> Result<Self, Self::Error> {
+        let mut set = HashSet::with_capacity(8);
+
+        let mut mask = 1u32;
+        for _ in 0..32 {
+            let masked = value.value & mask;
+            mask <<= 1;
+
+            let ty = EntityType::try_from(masked)?;
+            set.insert(ty);
+        }
+
+        Ok(set)
+    }
+}
 
 #[derive(Debug)]
 pub struct AuthCapsInfo {
