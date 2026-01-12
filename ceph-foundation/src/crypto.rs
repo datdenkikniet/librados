@@ -186,7 +186,7 @@ impl Key {
         let tag: [u8; TAG_SIZE] = tag.try_into().unwrap();
 
         gcm.decrypt_in_place_detached(&nonce, &[], data, &tag.into())
-            .unwrap();
+            .ok()?;
 
         Some(data)
     }
