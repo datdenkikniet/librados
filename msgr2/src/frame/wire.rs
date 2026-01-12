@@ -217,7 +217,7 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
     }
 }
 
-impl RxFrame<'_, Completed> {
+impl<'a> RxFrame<'a, Completed> {
     pub fn preamble_data(&self) -> &[u8] {
         self.state.preamble_data.as_ref()
     }
@@ -226,8 +226,8 @@ impl RxFrame<'_, Completed> {
         &self.state.preamble
     }
 
-    pub fn data(&self) -> &[u8] {
-        self.frame_data
+    pub fn into_preamble_and_data(self) -> (Preamble, &'a [u8]) {
+        (self.state.preamble, self.frame_data)
     }
 }
 
