@@ -70,7 +70,7 @@ pub fn encode_encrypt<T: Encode>(t: &T, key: &Key) -> Vec<u8> {
 
 /// A cryptographic key.
 ///
-/// This is the equivalent of the `CryptoKey` struct in the
+/// This is the equivalent of the `Key` struct in the
 /// ceph source code.
 // TODO: zeroize...
 pub struct Key {
@@ -81,7 +81,7 @@ pub struct Key {
 
 impl core::fmt::Debug for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CryptoKey")
+        f.debug_struct("Key")
             .field("ty", &self.ty)
             .field("created", &self.created)
             .field("secret", &format!("<{} secret bytes>", self.secret.len()))
@@ -127,7 +127,7 @@ impl Decode<'_> for Key {
 }
 
 impl Key {
-    /// Create a new [`CryptoKey`].
+    /// Create a new [`Key`].
     pub fn new(created: Timestamp, secret: [u8; 16]) -> Self {
         Self {
             ty: 1,
