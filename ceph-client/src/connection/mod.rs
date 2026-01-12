@@ -451,18 +451,20 @@ where
     }
 
     pub fn finish_rx(&mut self, frame: RxFrame<'_, Completed>) -> Result<Message, DecodeError> {
-        let frame = self.finish_rx_raw(&frame)?;
+        let frame = self.finish_rx_raw(frame)?;
         Message::decode(frame.tag(), frame.segments().next().unwrap())
     }
 
     pub fn finish_rx_raw<'frame>(
         &mut self,
-        frame: &'frame RxFrame<'frame, Completed>,
+        frame: RxFrame<'frame, Completed>,
     ) -> Result<Frame<'frame>, DecodeError> {
         self.state.recv_data(frame.preamble_data());
-        self.state.recv_data(frame.data());
 
-        Frame::decode(frame.preamble(), frame.data())
+        let (preamble, data) = frame.into_preamble_and_data();
+        self.state.recv_data(data);
+
+        Frame::decode(&preamble, data)
     }
 }
 

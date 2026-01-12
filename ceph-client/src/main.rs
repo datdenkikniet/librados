@@ -199,7 +199,7 @@ fn main() {
 
     let mut buffer = Vec::new();
     let next = recv_raw(&mut buffer, &mut connection, &mut stream);
-    let next = connection.finish_rx_raw(&next).unwrap();
+    let next = connection.finish_rx_raw(next).unwrap();
 
     let ping_response = msgr2::frames::Message::decode(&next).unwrap();
 
