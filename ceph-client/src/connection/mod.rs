@@ -1,7 +1,7 @@
 //! A sans-IO implementation of a `msgr2` connection, with support
 //! for authentication-less and CephX connections.
 
-mod auth;
+pub mod auth;
 mod config;
 pub mod state;
 

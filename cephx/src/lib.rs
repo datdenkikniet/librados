@@ -77,7 +77,7 @@ impl TryFrom<u16> for CephXMessageType {
 }
 
 /// A CephX response header.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CephXResponseHeader {
     /// The type of the message.
     pub ty: CephXMessageType,

@@ -7,3 +7,7 @@ edition = "2024"
 ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
 crc = "3.4.0"
 crc-catalog = "2.4.0"
+
+[dev-dependencies]
+cephx.path = "../cephx"
+ceph-client.path = "../ceph-client"
