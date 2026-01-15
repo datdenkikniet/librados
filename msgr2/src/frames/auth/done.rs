@@ -5,7 +5,7 @@ use crate::frames::auth::ConMode;
 ///
 /// After this message is received, the connection switches to
 /// secure mode if that was negotiated.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthDone {
     /// The assigned global ID.
     pub global_id: u64,

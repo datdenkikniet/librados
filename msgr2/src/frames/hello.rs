@@ -5,7 +5,7 @@ use ceph_foundation::{
 
 /// A basic hello message, relaying information about
 /// the entity that sends it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
     /// The type of the entity.
     pub entity_type: EntityType,

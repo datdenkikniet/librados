@@ -10,7 +10,7 @@ pub trait AuthRequestPayload: crate::sealed::Sealed + Encode {
 }
 
 /// An authentication request.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthRequest {
     method: AuthMethod,
     /// A prioritized list of preferred connection modes.
@@ -76,7 +76,7 @@ impl AuthRequestPayload for AuthMethodCephX {
 }
 
 /// Additional data in an authentication request.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthRequestMore {
     /// The payload of the message.
     pub payload: Vec<u8>,
