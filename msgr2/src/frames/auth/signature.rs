@@ -1,5 +1,5 @@
 /// An authentication signature.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthSignature {
     /// The `sha256_hmac` hash of all of the application-layer data
     /// that was sent by this entity up to the point where
