@@ -119,7 +119,7 @@ impl<'a> Frame<'a> {
 
     pub(crate) fn preamble(&self, format: FrameFormat) -> Preamble {
         let mut segment_details = [SegmentDetail::default(); 4];
-        for (idx, segment) in self.segments().enumerate() {
+        for (idx, segment) in self.segments().iter().enumerate() {
             segment_details[idx] = SegmentDetail {
                 length: segment.len() as _,
                 alignment: 1,
@@ -147,7 +147,7 @@ impl<'a> Frame<'a> {
 
         let mut crcs = [0u32; 4];
 
-        for (idx, segment) in self.segments().enumerate() {
+        for (idx, segment) in self.segments().iter().enumerate() {
             let crc = CRC.checksum(segment);
             crcs[idx] = crc;
             output.extend_from_slice(segment);
@@ -323,9 +323,7 @@ impl<'a> Frame<'a> {
         self.tag
     }
 
-    pub fn segments(&self) -> impl Iterator<Item = &[u8]> {
-        self.segments[..self.valid_segments.get() as usize]
-            .iter()
-            .map(|v| v.as_ref())
+    pub fn segments(&self) -> &[&[u8]] {
+        &self.segments[..self.valid_segments.get() as usize]
     }
 }
