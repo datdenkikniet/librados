@@ -24,7 +24,7 @@ impl<'a> Message<'a> {
     }
 
     pub fn decode(frame: &'a Frame<'a>) -> Result<Self, DecodeError> {
-        let mut segments = frame.segments();
+        let mut segments = frame.segments().iter().copied();
         let Some(header) = segments.next() else {
             return Err(DecodeError::Custom(
                 "Received message frame without header segment".to_string(),

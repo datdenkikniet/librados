@@ -452,7 +452,7 @@ where
 
     pub fn finish_rx(&mut self, frame: RxFrame<'_, Completed>) -> Result<Message, DecodeError> {
         let frame = self.finish_rx_raw(frame)?;
-        Message::decode(frame.tag(), frame.segments().next().unwrap())
+        Message::decode(frame.tag(), frame.segments()[0])
     }
 
     pub fn finish_rx_raw<'frame>(
