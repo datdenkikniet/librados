@@ -1,7 +1,7 @@
 use crate::frames::MsgrFeatures;
 
 /// The initial connection banner.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Banner {
     supported_features: MsgrFeatures,
     required_features: MsgrFeatures,

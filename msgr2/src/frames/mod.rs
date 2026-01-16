@@ -27,7 +27,7 @@ const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
 
 /// A set of `msgr2` features.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MsgrFeatures(u64);
 
 impl MsgrFeatures {
@@ -53,6 +53,15 @@ impl MsgrFeatures {
     /// Whether this feature set indicates support for compression.
     pub const fn compression(&self) -> bool {
         self.0 & FEATURE_COMPRESSION == FEATURE_COMPRESSION
+    }
+
+    /// Set whether this feature set indicates support for compression
+    pub const fn set_compression(&mut self, compression: bool) {
+        if !compression {
+            self.0 &= !FEATURE_COMPRESSION;
+        } else {
+            self.0 |= FEATURE_COMPRESSION;
+        }
     }
 }
 
