@@ -204,7 +204,7 @@ impl Key {
 
 #[test]
 fn decode_key() {
-    let key_data = include_bytes!("./test.key");
+    let key_data = include_bytes!("../../test-data/key.bin");
 
     let key = Key::decode(&mut &key_data[..]).unwrap();
 
@@ -212,14 +212,14 @@ fn decode_key() {
     assert_eq!(
         key.created,
         Timestamp {
-            tv_sec: 1763662875,
-            tv_nsec: 702926448
+            tv_sec: 1767279359,
+            tv_nsec: 143512554
         }
     );
     assert_eq!(
         key.secret,
         &[
-            157, 25, 114, 34, 166, 24, 254, 3, 91, 218, 89, 106, 184, 116, 189, 55
+            157, 21, 143, 149, 10, 8, 137, 47, 35, 201, 166, 12, 57, 179, 0, 71
         ]
     );
 }
