@@ -1,0 +1,43 @@
+use crate::*;
+
+macro_rules! msg_type {
+    ($($n:ident$(($ty:ident))? = $v:literal,)*)  => {
+        #[derive(Debug, Clone)]
+        #[repr(u16)]
+        pub enum CephMessage {
+            $(
+                $n$(($ty))? = $v,
+            )*
+        }
+
+        impl CephMessage {
+            pub fn decode_message(ty: u16, segments: &[&[u8]]) -> Result<Self, DecodeMessageError> {
+                match ty {
+                    $(
+                        $v => Ok(Self::$n$(($ty::decode_message(segments)?))?),
+                    )*
+                    ty => Err(DecodeMessageError::Custom(format!("Unknown message type: {ty}")))
+                }
+            }
+        }
+    };
+}
+
+msg_type! {
+    ShutDown = 1,
+    Ping = 2,
+    MonMap(MonMap) = 4,
+    MonGetMap = 5,
+    MonGetOsdMap = 6,
+    MonMetadata = 7,
+    StatFs = 13,
+    StatFsReply = 14,
+    MonSubscribe = 15,
+    MonSubscribeAck = 16,
+    Auth = 17,
+    AuthReply = 18,
+    MonGetVersion = 19,
+    MonGetVersionReply = 20,
+    GetPoolStats = 58,
+    GetPoolStatsReply = 59,
+}

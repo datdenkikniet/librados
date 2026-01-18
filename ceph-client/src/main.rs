@@ -3,22 +3,24 @@ use std::{
     net::TcpStream,
 };
 
+mod header;
+
+use ceph_messages::CephMessageType;
 use msgr2::{
     Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
     wire::{Completed, RxFrame, TxFrame},
 };
 
-use ceph_client::{
-    CephMessageHeader2, CephMessageHeader2Flags, CephMessageType,
-    connection::{ClientConnection, Config, Message, state::Established},
-};
+use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
 use ceph_foundation::{
     CephFeatureSet, Decode, Encode, Timestamp, WireString,
     crypto::Key,
     entity::{EntityAddress, EntityAddressType, EntityName, EntityType},
 };
+
+use crate::header::{CephMessageHeader2, CephMessageHeader2Flags};
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");
@@ -181,7 +183,7 @@ fn main() {
 
     let header = CephMessageHeader2 {
         seq: 1,
-        tid: 0,
+        transaction_id: 0,
         ty: CephMessageType::Ping,
         priority: 0,
         version: 0,
@@ -189,7 +191,7 @@ fn main() {
         data_off: 0,
         ack_seq: 0,
         flags: CephMessageHeader2Flags(0),
-        compat_version: 0,
+        compat_version: None,
         reserved: 0,
     };
 

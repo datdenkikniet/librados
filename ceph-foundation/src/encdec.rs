@@ -1,6 +1,9 @@
 #![macro_use]
 
-use std::ops::RangeInclusive;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+};
 
 #[macro_export]
 macro_rules! write_decode_encode {
@@ -208,6 +211,19 @@ impl<'a> From<WireString<'a>> for &'a str {
     }
 }
 
+impl Encode for String {
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        WireString(self.as_ref()).encode(buffer);
+    }
+}
+
+impl Decode<'_> for String {
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
+        let ws = WireString::decode(buffer)?;
+        Ok(ws.as_str().to_string())
+    }
+}
+
 /// A trait for decoding data from a byte buffer.
 pub trait Decode<'a>: Sized {
     /// Decodes a `Self` from `buffer` (using the Ceph binary
@@ -381,5 +397,69 @@ impl Decode<'_> for bool {
         *buffer = left;
 
         Ok(*v != 0)
+    }
+}
+
+impl<K> Encode for HashSet<K>
+where
+    K: Encode + Eq + core::hash::Hash,
+{
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        encode_len(self.len(), buffer);
+
+        for k in self.iter() {
+            k.encode(buffer);
+        }
+    }
+}
+
+impl<'a, K> Decode<'a> for HashSet<K>
+where
+    K: Decode<'a> + Eq + core::hash::Hash + 'a,
+{
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError> {
+        let len = u32::decode(buffer)?;
+
+        let mut out = HashSet::with_capacity(len as usize);
+
+        for _ in 0..len {
+            out.insert(K::decode(buffer)?);
+        }
+
+        Ok(out)
+    }
+}
+
+impl<K, V> Encode for HashMap<K, V>
+where
+    K: Encode + Eq + core::hash::Hash,
+    V: Encode,
+{
+    fn encode(&self, buffer: &mut Vec<u8>) {
+        encode_len(self.len(), buffer);
+
+        for (k, v) in self.iter() {
+            k.encode(buffer);
+            v.encode(buffer);
+        }
+    }
+}
+
+impl<'a, K, V> Decode<'a> for HashMap<K, V>
+where
+    K: Decode<'a> + Eq + core::hash::Hash + 'a,
+    V: Decode<'a> + 'a,
+{
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError> {
+        let len = u32::decode(buffer)?;
+
+        let mut out = HashMap::with_capacity(len as usize);
+        for _ in 0..len {
+            let k = K::decode(buffer)?;
+            let v = V::decode(buffer)?;
+            out.insert(k, v);
+        }
+
+        Ok(out)
     }
 }
