@@ -64,7 +64,7 @@ impl Decode<'_> for SocketAddressWrapper {
 }
 
 /// An entity address.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntityAddress {
     /// The type of the entity address.
     pub ty: EntityAddressType,
@@ -152,7 +152,7 @@ impl Decode<'_> for EntityAddress {
 
 /// The type of entity that we are talking
 /// to (at the communication level).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 #[expect(missing_docs)]
 pub enum EntityAddressType {

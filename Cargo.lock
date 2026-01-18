@@ -69,6 +69,7 @@ name = "ceph-client"
 version = "0.1.0"
 dependencies = [
  "ceph-foundation",
+ "ceph-messages",
  "cephx",
  "msgr2",
 ]
@@ -82,6 +83,13 @@ dependencies = [
  "cbc",
  "hmac",
  "sha2",
+]
+
+[[package]]
+name = "ceph-messages"
+version = "0.1.0"
+dependencies = [
+ "ceph-foundation",
 ]
 
 [[package]]

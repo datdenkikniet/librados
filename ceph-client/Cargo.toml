@@ -5,5 +5,6 @@ edition = "2024"
 
 [dependencies]
 ceph-foundation = { version = "0.1.0", path = "../ceph-foundation" }
+ceph-messages = { version = "0.1.0", path = "../ceph-messages" }
 cephx = { version = "0.1.0", path = "../cephx" }
 msgr2 = { version = "0.1.0", path = "../msgr2" }

@@ -1,4 +1,7 @@
-use ceph_foundation::{CephFeatureSet, entity::EntityAddress};
+use ceph_foundation::{
+    CephFeatureSet,
+    entity::{AddrVec, EntityAddress},
+};
 
 /// A client identification message.
 #[derive(Clone, Debug)]
@@ -26,4 +29,13 @@ pub struct ClientIdent {
     pub cookie: u64,
 }
 
-ceph_foundation::write_decode_encode!(ClientIdent = /* version for entity_addrvec_t */ const version 2 as u8 | addresses | target | gid | global_seq | supported_features as u64 | required_features as u64 | flags | cookie);
+ceph_foundation::write_decode_encode!(
+    ClientIdent = addresses as AddrVec
+        | target
+        | gid
+        | global_seq
+        | supported_features as u64
+        | required_features as u64
+        | flags
+        | cookie
+);
