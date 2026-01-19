@@ -5,7 +5,7 @@ mod features;
 mod mon_info;
 mod uuid;
 
-pub use encdec::{Decode, DecodeError, Encode, WireString};
+pub use encdec::{Decode, DecodeError, Encode, Encoder, WireString};
 pub use features::CephFeatureSet;
 pub use mon_info::MonInfo;
 pub use uuid::Uuid;

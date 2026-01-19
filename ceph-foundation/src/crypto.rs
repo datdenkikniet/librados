@@ -1,4 +1,4 @@
-use crate::{Decode, DecodeError, Encode, Timestamp};
+use crate::{Decode, DecodeError, Encode, Encoder, Timestamp};
 
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 use aes_gcm::{AeadCore, AeadInPlace, Aes128Gcm, KeyInit};
@@ -91,7 +91,7 @@ impl core::fmt::Debug for Key {
 
 // TODO: this should not implement Encode directly...
 impl Encode for Key {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         self.ty.encode(buffer);
         self.created.encode(buffer);
 

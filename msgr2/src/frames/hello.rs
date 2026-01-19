@@ -1,5 +1,5 @@
 use ceph_foundation::{
-    Decode, DecodeError, Encode,
+    Decode, DecodeError, Encode, Encoder,
     entity::{EntityAddress, EntityType},
 };
 
@@ -18,7 +18,7 @@ pub struct Hello {
 }
 
 impl Encode for Hello {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         buffer.push(self.entity_type.into());
         self.peer_address.encode(buffer);
     }

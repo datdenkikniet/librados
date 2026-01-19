@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use ceph_foundation::{Decode, DecodeError, Encode, MonInfo, Timestamp, Uuid, write_decode_encode};
+use ceph_foundation::{
+    Decode, DecodeError, Encode, Encoder, MonInfo, Timestamp, Uuid, write_decode_encode,
+};
 
 use crate::DecodeMessage;
 
@@ -76,7 +78,7 @@ pub struct MonFeatures {
 }
 
 impl Encode for MonFeatures {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         [1u8, 1].encode(buffer);
         // This struct requires us to encode the length...
         // Find a better way to deal with this (hopefully

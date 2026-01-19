@@ -1,10 +1,10 @@
-use crate::{Decode, Encode};
+use crate::{Decode, Encode, Encoder};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Uuid(pub [u8; 16]);
 
 impl Encode for Uuid {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         self.0.encode(buffer);
     }
 }
