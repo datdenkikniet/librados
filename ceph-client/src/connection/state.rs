@@ -1,6 +1,6 @@
 //! The different states that a connection can be in.
 
-use cephx::CephXServiceTicket;
+use cephx::Ticket;
 use msgr2::{FrameEncryption, FrameFormat, Revision};
 
 /// A connection state that is capable of receiving [`RxFrame`][0]s and
@@ -56,7 +56,7 @@ pub struct ExchangingSignatures {
     pub(crate) encryption: FrameEncryption,
     pub(crate) rx_buf: Vec<u8>,
     pub(crate) tx_buf: Vec<u8>,
-    pub(crate) auth_ticket: Option<CephXServiceTicket>,
+    pub(crate) tickets: Vec<Ticket>,
 }
 
 /// A connection where the clien-server pair is exchanging
@@ -66,7 +66,7 @@ pub struct ExchangingSignatures {
 pub struct Identifying {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
-    pub(crate) auth_ticket: Option<CephXServiceTicket>,
+    pub(crate) tickets: Vec<Ticket>,
 }
 
 /// An active connection, sending and receiving upper-protocol
@@ -75,7 +75,7 @@ pub struct Identifying {
 pub struct Active {
     pub(crate) revision: Revision,
     pub(crate) encryption: FrameEncryption,
-    pub(crate) _auth_ticket: Option<CephXServiceTicket>,
+    pub(crate) _tickets: Vec<Ticket>,
 }
 
 macro_rules! established {

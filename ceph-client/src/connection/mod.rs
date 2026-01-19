@@ -1,12 +1,11 @@
 //! A sans-IO implementation of a `msgr2` connection, with support
 //! for authentication-less and CephX connections.
 
-pub mod auth;
 mod config;
 pub mod state;
 
-use ::cephx::{CephXMessage, CephXMessageType, CephXServiceTicket};
-use auth::AuthServiceTicketReply;
+use ::cephx::{CephXMessage, CephXMessageType};
+use cephx::{AuthServiceTicketReply, TicketsAndConnectionSecret};
 use state::{
     Active, Authenticating, Established, ExchangeHello, ExchangingSignatures, Identifying, Inactive,
 };
@@ -25,16 +24,12 @@ use msgr2::{
 
 pub use config::*;
 
-use ceph_foundation::{
-    Decode, DecodeError, Encode, Timestamp,
-    crypto::{Key, decode_decrypt_enc_bl},
-};
+use ceph_foundation::{Decode, DecodeError, Encode, Timestamp, crypto::Key};
 
 #[derive(Clone, Debug)]
 pub enum AuthError {
     Decode(DecodeError),
     NoAuthTicket,
-    NoConnectionSecret,
     UnexpectedCephXMessage {
         got: CephXMessageType,
         expected: CephXMessageType,
@@ -232,7 +227,7 @@ impl ClientConnection<Authenticating> {
                 encryption: state.encryption,
                 rx_buf: state.rx_buf,
                 tx_buf: state.tx_buf,
-                auth_ticket: None,
+                tickets: Vec::new(),
             }))
         }
     }
@@ -257,55 +252,15 @@ impl ClientConnection<Authenticating> {
         let service_ticket_infos = AuthServiceTicketReply::decode(&mut tickets)?;
         assert!(tickets.is_empty());
 
-        let mut auth_service_ticket = None;
-        let mut auth_connection_secret = None;
-
-        for mut info in service_ticket_infos.service_ticket_reply.tickets {
-            println!("Ticket entity: {:?}", info.ty);
-            println!("Additional ticket data: {:?}", info.refresh_ticket);
-
-            let service_session_ticket: CephXServiceTicket =
-                decode_decrypt_enc_bl(&mut info.encrypted_session_ticket, master_key)?;
-
-            // TODO: do something with this (refresh?) ticket
-            let _service_refresh_ticket = &info.refresh_ticket;
-
-            let encrypted = service_ticket_infos.connection_secret.clone();
-            let mut encrypted = <&[u8]>::decode(&mut encrypted.as_slice())?.to_vec();
-            let connection_secret: &[u8] =
-                decode_decrypt_enc_bl(&mut encrypted, &service_session_ticket.session_key)?;
-
-            if info.ty == EntityType::Auth {
-                auth_service_ticket = Some(service_session_ticket);
-                auth_connection_secret = Some(connection_secret.to_vec());
-            }
-        }
-
-        let Some(auth_service_ticket) = auth_service_ticket.take() else {
-            return Err(AuthError::NoAuthTicket);
-        };
-
-        let Some(auth_service_secret) = auth_connection_secret.take() else {
-            return Err(AuthError::NoConnectionSecret);
-        };
-
-        for mut info in service_ticket_infos.extra_service_tickets.tickets {
-            println!("Extra ticket entity: {:?}", info.ty);
-            println!("Extra ticket additional data: {:?}", info.refresh_ticket);
-
-            let _service_session_ticket: CephXServiceTicket = decode_decrypt_enc_bl(
-                &mut info.encrypted_session_ticket,
-                &auth_service_ticket.session_key,
-            )?;
-
-            // TODO: do something with this (refresh?) ticket
-            let _service_refresh_ticket = &info.refresh_ticket;
-        }
+        let TicketsAndConnectionSecret {
+            tickets,
+            connection_secret,
+        } = service_ticket_infos.decrypt(&master_key)?;
 
         if done.connection_mode == ConMode::Secure {
-            let encryption_key = auth_service_secret[00..16].try_into().unwrap();
-            let rx_nonce: [u8; 12] = auth_service_secret[16..28].try_into().unwrap();
-            let tx_nonce: [u8; 12] = auth_service_secret[28..40].try_into().unwrap();
+            let encryption_key = connection_secret[00..16].try_into().unwrap();
+            let rx_nonce: [u8; 12] = connection_secret[16..28].try_into().unwrap();
+            let tx_nonce: [u8; 12] = connection_secret[28..40].try_into().unwrap();
 
             let encryption_key = Key::new(
                 // TODO: probably best not to have this creation time be not completely BS
@@ -326,7 +281,7 @@ impl ClientConnection<Authenticating> {
         }
 
         Ok(self.with_state(|state| ExchangingSignatures {
-            auth_ticket: Some(auth_service_ticket),
+            tickets,
             revision: state.revision,
             encryption: state.encryption,
             rx_buf: state.rx_buf,
@@ -337,12 +292,15 @@ impl ClientConnection<Authenticating> {
 
 impl ClientConnection<ExchangingSignatures> {
     pub fn send_signature(&mut self) -> TxFrame<'_> {
-        let sha256_hmac =
-            if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
-                session_key.hmac_sha256(&self.state.rx_buf)
-            } else {
-                [0u8; 32]
-            };
+        let auth_ticket = self.state.tickets.iter().find(|t| t.ty == EntityType::Auth);
+
+        let sha256_hmac = if let Some(session_key) =
+            auth_ticket.as_ref().map(|v| &v.session_ticket.session_key)
+        {
+            session_key.hmac_sha256(&self.state.rx_buf)
+        } else {
+            [0u8; 32]
+        };
 
         let signature = AuthSignature { sha256_hmac };
 
@@ -359,8 +317,10 @@ impl ClientConnection<ExchangingSignatures> {
         self,
         signature: &AuthSignature,
     ) -> Result<ClientConnection<Identifying>, String> {
+        let auth_ticket = self.state.tickets.iter().find(|t| t.ty == EntityType::Auth);
+
         let valid_signature =
-            if let Some(session_key) = self.state.auth_ticket.as_ref().map(|v| &v.session_key) {
+            if let Some(session_key) = auth_ticket.map(|v| &v.session_ticket.session_key) {
                 session_key.hmac_sha256(&self.state.tx_buf)
             } else {
                 [0u8; 32]
@@ -373,7 +333,7 @@ impl ClientConnection<ExchangingSignatures> {
         Ok(self.with_state(|state| Identifying {
             revision: state.revision,
             encryption: state.encryption,
-            auth_ticket: state.auth_ticket,
+            tickets: state.tickets,
         }))
     }
 }
@@ -399,7 +359,7 @@ impl ClientConnection<Identifying> {
         Ok(self.with_state(|state| Active {
             revision: state.revision,
             encryption: state.encryption,
-            _auth_ticket: state.auth_ticket,
+            _tickets: state.tickets,
         }))
     }
 }
