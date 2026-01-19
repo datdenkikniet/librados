@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    Decode, DecodeError, Encode, Timestamp,
+    Decode, DecodeError, Encode, Encoder, Timestamp,
     entity::{AddrVec, EntityAddress},
 };
 
@@ -23,7 +23,9 @@ impl MonInfo {
 }
 
 impl Encode for MonInfo {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
+        // let buffer = crate::write_versions_and_data!(buffer, Self::VERSION, 3);
+        // self.name.encode(buffer);
         todo!()
     }
 }

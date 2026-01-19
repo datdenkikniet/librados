@@ -15,7 +15,7 @@ pub use request::{
 };
 pub use signature::AuthSignature;
 
-use ceph_foundation::{Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode, Encoder};
 
 /// An authentication method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl TryFrom<u32> for AuthMethod {
 }
 
 impl Encode for AuthMethod {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         u32::from(*self).encode(buffer);
     }
 }
@@ -121,7 +121,7 @@ impl TryFrom<u8> for ConMode {
 }
 
 impl Encode for ConMode {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         u32::from(u8::from(*self)).encode(buffer);
     }
 }

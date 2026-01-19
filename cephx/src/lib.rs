@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use ceph_foundation::{
-    Decode, DecodeError, Encode, Timestamp,
+    Decode, DecodeError, Encode, Encoder, Timestamp,
     crypto::{Key, encode_encrypt},
     entity::{EntityName, EntityType},
 };
@@ -98,7 +98,7 @@ pub struct CephXMessage {
 }
 
 impl Encode for CephXMessage {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         (self.ty as u16).encode(buffer);
         buffer.extend_from_slice(&self.payload);
     }
@@ -182,7 +182,7 @@ impl CephXAuthenticateKey {
         }
 
         impl Encode for ChallengeBlob {
-            fn encode(&self, buffer: &mut Vec<u8>) {
+            fn encode(&self, buffer: &mut impl Encoder) {
                 self.server_challenge.encode(buffer);
                 self.client_challenge.encode(buffer);
             }
@@ -302,7 +302,7 @@ impl Decode<'_> for MaybeEncryptedCephXTicketBlob {
 }
 
 impl Encode for MaybeEncryptedCephXTicketBlob {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         match self {
             MaybeEncryptedCephXTicketBlob::Unencrypted(ceph_xticket_blob) => {
                 false.encode(buffer);

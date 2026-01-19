@@ -21,7 +21,7 @@ pub use keepalive::{Keepalive, KeepaliveAck};
 pub use message::Message;
 pub use server_ident::ServerIdent;
 
-use ceph_foundation::{Decode, DecodeError, Encode};
+use ceph_foundation::{Decode, DecodeError, Encode, Encoder};
 
 const FEATURE_REVISION_21: u64 = 1 << 0;
 const FEATURE_COMPRESSION: u64 = 1 << 1;
@@ -66,7 +66,7 @@ impl MsgrFeatures {
 }
 
 impl Encode for MsgrFeatures {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         self.0.encode(buffer);
     }
 }

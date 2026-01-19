@@ -75,7 +75,7 @@ macro_rules! write_decode_encode {
         }
 
         impl $crate::Encode for $ty<'_> {
-            fn encode(&self, buffer: &mut Vec<u8>) {
+            fn encode(&self, buffer: &mut impl Encoder) {
                 $crate::write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
@@ -89,7 +89,7 @@ macro_rules! write_decode_encode {
         }
 
         impl $crate::Encode for $ty {
-            fn encode(&self, buffer: &mut Vec<u8>) {
+            fn encode(&self, buffer: &mut impl $crate::Encoder) {
                 $crate::write_decode_encode!(enc(self, buffer): { $($tt)* });
             }
         }
@@ -180,7 +180,7 @@ impl<'a> Decode<'a> for WireString<'a> {
 }
 
 impl Encode for WireString<'_> {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         self.0.as_bytes().encode(buffer);
     }
 }
@@ -212,7 +212,7 @@ impl<'a> From<WireString<'a>> for &'a str {
 }
 
 impl Encode for String {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         WireString(self.as_ref()).encode(buffer);
     }
 }
@@ -244,10 +244,35 @@ pub trait Decode<'a>: Sized {
     }
 }
 
-/// A trait for encoding data to a `Vec<u8>`.
+pub trait Encoder {
+    fn extend_from_slice(&mut self, slice: &[u8]);
+    fn reserve(&mut self, len: usize);
+    fn push(&mut self, value: u8);
+    fn len(&self) -> usize;
+}
+
+impl Encoder for Vec<u8> {
+    fn extend_from_slice(&mut self, slice: &[u8]) {
+        self.extend_from_slice(slice);
+    }
+
+    fn reserve(&mut self, len: usize) {
+        self.reserve(len);
+    }
+
+    fn push(&mut self, value: u8) {
+        self.push(value);
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+
+/// A trait for encoding data to a `Encoder`.
 pub trait Encode {
     /// Encode the Ceph binary representation of `Self` into `buffer`.
-    fn encode(&self, buffer: &mut Vec<u8>);
+    fn encode(&self, buffer: &mut impl Encoder);
 
     /// Encode `Self` to a `Vec`.
     fn to_vec(&self) -> Vec<u8> {
@@ -257,7 +282,7 @@ pub trait Encode {
     }
 }
 
-fn encode_len(v: usize, buffer: &mut Vec<u8>) {
+fn encode_len(v: usize, buffer: &mut impl Encoder) {
     let len = u32::try_from(v).expect("Slice length does not fit into u32");
     len.encode(buffer);
 }
@@ -266,13 +291,13 @@ impl<T> Encode for &'_ T
 where
     T: Encode,
 {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         (*self).encode(buffer);
     }
 }
 
 impl Encode for [u8] {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         buffer.reserve(4 + self.len());
         encode_len(self.len(), buffer);
         buffer.extend_from_slice(self);
@@ -280,7 +305,7 @@ impl Encode for [u8] {
 }
 
 impl<const N: usize> Encode for [u8; N] {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         buffer.extend_from_slice(self.as_slice());
     }
 }
@@ -289,7 +314,7 @@ impl<T> Encode for [T]
 where
     T: Encode,
 {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         encode_len(self.len(), buffer);
         for item in self.iter() {
             item.encode(buffer)
@@ -301,7 +326,7 @@ impl<const N: usize, T> Encode for [T; N]
 where
     T: Encode,
 {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         for item in self.iter() {
             item.encode(buffer);
         }
@@ -312,7 +337,7 @@ macro_rules! encode_int {
     ($($int:ty),*) => {
         $(
             impl Encode for $int {
-                fn encode(&self, buffer: &mut Vec<u8>) {
+                fn encode(&self, buffer: &mut impl Encoder) {
                     buffer.extend_from_slice(&self.to_le_bytes());
                 }
             }
@@ -390,7 +415,7 @@ impl<const N: usize> Decode<'_> for [u8; N] {
 }
 
 impl Encode for bool {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         buffer.push(*self as u8)
     }
 }
@@ -415,7 +440,7 @@ impl<K> Encode for HashSet<K>
 where
     K: Encode + Eq + core::hash::Hash,
 {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         encode_len(self.len(), buffer);
 
         for k in self.iter() {
@@ -446,7 +471,7 @@ where
     K: Encode + Eq + core::hash::Hash,
     V: Encode,
 {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         encode_len(self.len(), buffer);
 
         for (k, v) in self.iter() {

@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 const AF_INET: u16 = 2;
 const AF_INET6: u16 = 10;
 
-use crate::{Decode, DecodeError, Encode};
+use crate::{Decode, DecodeError, Encode, Encoder};
 
 #[derive(Clone, Copy)]
 struct SocketAddressWrapper(SocketAddr);
@@ -18,7 +18,7 @@ impl SocketAddressWrapper {
 }
 
 impl Encode for SocketAddressWrapper {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         match &self.0 {
             SocketAddr::V4(v4_addr) => {
                 AF_INET.encode(buffer);
@@ -75,7 +75,7 @@ pub struct EntityAddress {
 }
 
 impl Encode for EntityAddress {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         let address = self.address.map(SocketAddressWrapper);
         let address_len = address.map(|v| 2 + v.encoded_len()).unwrap_or(0) as u32;
 
