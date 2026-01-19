@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    Decode, Encode, WireString,
+    Decode, DecodeError, Encode, Timestamp,
     entity::{AddrVec, EntityAddress},
 };
 
@@ -13,6 +13,13 @@ pub struct MonInfo {
     pub priority: u16,
     pub weight: u16,
     pub crush_location: HashMap<String, String>,
+    pub time_added: Timestamp,
+}
+
+impl MonInfo {
+    /// The current version for our encoding/decoding logic
+    /// for this struct.
+    const VERSION: u8 = 6;
 }
 
 impl Encode for MonInfo {
@@ -22,54 +29,33 @@ impl Encode for MonInfo {
 }
 
 impl Decode<'_> for MonInfo {
-    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, crate::DecodeError> {
-        let [version, compat] = <[u8; 2]>::decode(buffer)?;
+    fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
+        let (version, mut data) = crate::get_versions_and_data!(buffer, Self::VERSION);
 
-        if version != 5 {
-            return Err(crate::DecodeError::UnexpectedVersion {
-                ty: "MonInfo",
-                got: version,
-                expected: 5..=5,
-            });
+        if version == 1 || version == 2 {
+            return Err(DecodeError::Custom(
+                    "MonInfo version 1 and 2 are only supported in versions before NAUTILUS, which this library does not support."
+                .to_string()));
         }
 
-        if compat != 1 {
-            return Err(crate::DecodeError::UnexpectedVersion {
-                ty: "MonInfo",
-                got: compat,
-                expected: 1..=1,
-            });
-        }
+        let data = &mut data;
+        let name = Decode::decode(data)?;
+        let public_addrs = AddrVec::decode(data)?.try_into()?;
 
-        let mut data = <&[u8]>::decode(buffer)?;
-        let mon_info = MonInfo9_5::decode(&mut data)?;
+        // Encoded for version >= 2 (we do not support versions older than that)
+        let priority = Decode::decode(data)?;
 
-        Ok(mon_info.into())
-    }
-}
+        let weight = u16::decode_if(version >= 4, buffer)?;
+        let crush_location = Decode::decode_if(version >= 5, buffer)?;
+        let time_added = Timestamp::decode_if(version >= 6, buffer)?;
 
-struct MonInfo9_5 {
-    name: String,
-    public_addrs: Vec<EntityAddress>,
-    // Priority: lower = more important. Probably want newtype.
-    priority: u16,
-    weight: u16,
-    crush_location: HashMap<String, String>,
-}
-
-write_decode_encode!(
-    MonInfo9_5 = name as WireString | public_addrs as AddrVec | priority | weight | crush_location
-);
-
-impl Into<MonInfo> for MonInfo9_5 {
-    fn into(self) -> MonInfo {
-        MonInfo {
-            name: self.name,
-            public_addrs: self.public_addrs,
-            // Priority: lower = more important. Probably want newtype.
-            priority: self.priority,
-            weight: self.weight,
-            crush_location: self.crush_location,
-        }
+        Ok(Self {
+            name,
+            public_addrs,
+            priority,
+            weight,
+            crush_location,
+            time_added,
+        })
     }
 }

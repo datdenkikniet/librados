@@ -231,6 +231,17 @@ pub trait Decode<'a>: Sized {
     /// be include the bytes left over after decoding
     /// completed.
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError>;
+
+    fn decode_if(cond: bool, buffer: &mut &'a [u8]) -> Result<Self, DecodeError>
+    where
+        Self: Default,
+    {
+        if cond {
+            Self::decode(buffer)
+        } else {
+            Ok(Default::default())
+        }
+    }
 }
 
 /// A trait for encoding data to a `Vec<u8>`.
