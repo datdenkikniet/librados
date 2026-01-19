@@ -20,19 +20,36 @@ pub struct Timestamp {
     pub tv_nsec: u32,
 }
 
+impl Timestamp {
+    pub fn new(sec: u32, nsec: u32) -> Self {
+        Self {
+            tv_sec: sec,
+            tv_nsec: nsec,
+        }
+    }
+}
+
 write_decode_encode!(Timestamp = tv_sec | tv_nsec);
 
 #[macro_export]
 macro_rules! get_versions_and_data {
-    ($buffer:expr, $version:expr) => {{
+    ($ty:ty: $buffer:expr, $version:expr$(, $min_nautilus:expr)?) => {{
         let [version, compat]: [u8; 2] = $crate::Decode::decode($buffer)?;
 
         if compat > $version {
             return Err(DecodeError::Custom(format!(
-                "Incompatible MonInfo struct: we are at {}, received version is {} which claims compatilibity down to {}",
-                $version, version, compat
-            )));
+                "Incompatible {} struct: we are at {}, received version is {} which claims compatilibity down to {}",
+                stringify!($ty), $version, version, compat
+            )).into());
         }
+
+        $(
+            if $version < $min_nautilus {
+                return Err(DecodeError::Custom(
+                    format!("Incompatible {} struct: received version {} is pre-NAUTILUS library does not support (minimum supported version: {}).", stringify!(ty), version, $min_nautilus),
+                ).into());
+            }
+        )?
 
         let data: &[u8] = $crate::Decode::decode($buffer)?;
 
@@ -40,41 +57,68 @@ macro_rules! get_versions_and_data {
     }};
 }
 
-struct LenWriter<'a> {
-    buffer: &'a mut Vec<u8>,
+pub struct LenWriter<'a, E>
+where
+    E: Encoder,
+{
+    encoder: &'a mut E,
     len_at: usize,
 }
 
-impl Drop for LenWriter<'_> {
+impl<'a, E> LenWriter<'a, E>
+where
+    E: Encoder,
+{
+    pub fn new(encoder: &'a mut E, len_at: usize) -> Self {
+        Self { encoder, len_at }
+    }
+}
+
+impl<E> Drop for LenWriter<'_, E>
+where
+    E: Encoder,
+{
     fn drop(&mut self) {
-        let diff = self.buffer.len().checked_sub(self.len_at).unwrap();
+        let diff = self.encoder.len().checked_sub(self.len_at).unwrap();
         let minus_len_bytes = diff.checked_sub(4).unwrap();
         let as_u32: u32 = minus_len_bytes.try_into().unwrap();
-        self.buffer[self.len_at..self.len_at + 4].copy_from_slice(&as_u32.to_le_bytes());
+        self.encoder
+            .write_at(self.len_at, as_u32.to_le_bytes().as_slice());
     }
 }
 
-impl core::borrow::Borrow<Vec<u8>> for LenWriter<'_> {
-    fn borrow(&self) -> &Vec<u8> {
-        &self.buffer
+impl<E> Encoder for LenWriter<'_, E>
+where
+    E: Encoder,
+{
+    fn extend_from_slice(&mut self, slice: &[u8]) {
+        self.encoder.extend_from_slice(slice);
+    }
+
+    fn reserve(&mut self, len: usize) {
+        self.encoder.reserve(len);
+    }
+
+    fn push(&mut self, value: u8) {
+        self.encoder.push(value);
+    }
+
+    fn len(&self) -> usize {
+        self.encoder.len()
+    }
+
+    fn write_at(&mut self, start: usize, data: &[u8]) {
+        self.encoder.write_at(start, data);
     }
 }
 
-impl core::borrow::BorrowMut<Vec<u8>> for LenWriter<'_> {
-    fn borrow_mut(&mut self) -> &mut Vec<u8> {
-        &mut self.buffer
-    }
-}
-
+/// Usage: `let buffer = &mut write_versions_and_data!(buffer, version, compat);``
 #[macro_export]
 macro_rules! write_versions_and_data {
     ($buffer:expr, $version:expr, $compat:expr) => {{
         $buffer.extend_from_slice(&[$version, $compat]);
         let len_at = $buffer.len();
         $buffer.extend_from_slice(&0u32.to_le_bytes());
-        $crate::LenWriter {
-            buffer: $buffer,
-            len_at,
-        }
+        $crate::LenWriter::new($buffer, len_at)
     }};
 }

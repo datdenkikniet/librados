@@ -2,6 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    convert::Infallible,
     ops::RangeInclusive,
 };
 
@@ -158,7 +159,14 @@ impl DecodeError {
     }
 }
 
+impl From<Infallible> for DecodeError {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
+}
+
 /// The on-wire representation of a string.
+#[derive(Default)]
 pub struct WireString<'a>(&'a str);
 
 impl WireString<'_> {
@@ -197,11 +205,9 @@ impl<'a> From<&'a str> for WireString<'a> {
     }
 }
 
-impl TryFrom<WireString<'_>> for String {
-    type Error = DecodeError;
-
-    fn try_from(value: WireString) -> Result<Self, Self::Error> {
-        Ok(value.0.to_string())
+impl From<WireString<'_>> for String {
+    fn from(value: WireString<'_>) -> Self {
+        value.as_str().to_string()
     }
 }
 
@@ -232,12 +238,12 @@ pub trait Decode<'a>: Sized {
     /// completed.
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, DecodeError>;
 
-    fn decode_if(cond: bool, buffer: &mut &'a [u8]) -> Result<Self, DecodeError>
+    fn decode_if(cond: bool, buffer: &mut &'a [u8]) -> Result<Option<Self>, DecodeError>
     where
         Self: Default,
     {
         if cond {
-            Self::decode(buffer)
+            Ok(Some(Self::decode(buffer)?))
         } else {
             Ok(Default::default())
         }
@@ -249,6 +255,9 @@ pub trait Encoder {
     fn reserve(&mut self, len: usize);
     fn push(&mut self, value: u8);
     fn len(&self) -> usize;
+    /// Write `data` to a previously initialized sub-slice
+    /// starting at `start` and ending at a `start + data.len()`
+    fn write_at(&mut self, start: usize, data: &[u8]);
 }
 
 impl Encoder for Vec<u8> {
@@ -266,6 +275,10 @@ impl Encoder for Vec<u8> {
 
     fn len(&self) -> usize {
         self.len()
+    }
+
+    fn write_at(&mut self, start: usize, data: &[u8]) {
+        self[start..start + data.len()].copy_from_slice(data);
     }
 }
 
