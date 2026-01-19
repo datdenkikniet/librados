@@ -5,7 +5,7 @@ use std::{
 
 mod header;
 
-use ceph_messages::CephMessageType;
+use ceph_messages::{CephMessage, DecodeMessage, MonMap};
 use msgr2::{
     Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
@@ -181,10 +181,12 @@ fn main() {
 
     println!("Keepalive RX: {rx_keepalive:?}");
 
+    let message = CephMessage::MonGetMap;
+
     let header = CephMessageHeader2 {
         seq: 1,
         transaction_id: 0,
-        ty: CephMessageType::Ping,
+        ty: message.identifier(),
         priority: 0,
         version: 0,
         data_pre_padding_len: 0,
@@ -206,9 +208,13 @@ fn main() {
     let next = recv_raw(&mut buffer, &mut connection, &mut stream);
     let next = connection.finish_rx_raw(next).unwrap();
 
-    let ping_response = msgr2::frames::Message::decode(&next).unwrap();
+    let mon_get_map_response = msgr2::frames::Message::from_frame(&next).unwrap();
 
-    let mut reply_string = ping_response.front().unwrap();
-    let reply_string: &str = WireString::decode(&mut reply_string).unwrap().into();
-    println!("Ping reply JSON payload: {reply_string}");
+    let header = CephMessageHeader2::decode(&mut mon_get_map_response.header()).unwrap();
+
+    println!("{header:?}");
+
+    let mon_map = MonMap::decode_message(mon_get_map_response.data_segments()).unwrap();
+
+    panic!("{mon_map:#?}")
 }

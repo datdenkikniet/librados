@@ -19,6 +19,16 @@ macro_rules! msg_type {
                     ty => Err(DecodeMessageError::Custom(format!("Unknown message type: {ty}")))
                 }
             }
+
+            pub fn identifier(&self) -> u16 {
+                #[allow(unused_variables)]
+                #[allow(non_snake_case)]
+                match self {
+                    $(
+                        Self::$n$(($ty))? => $v,
+                    )*
+                }
+            }
         }
     };
 }

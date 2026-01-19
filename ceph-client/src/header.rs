@@ -1,8 +1,6 @@
 use std::num::NonZeroU16;
 
-use ceph_foundation::{Decode, DecodeError, Encode, write_decode_encode};
-
-use crate::CephMessageType;
+use ceph_foundation::{Decode, DecodeError, Encode, Encoder, write_decode_encode};
 
 struct SomeOrZero {
     value: u16,
@@ -30,7 +28,7 @@ impl TryFrom<SomeOrZero> for Option<NonZeroU16> {
 pub struct CephMessageHeader2 {
     pub seq: u64,
     pub transaction_id: u64,
-    pub ty: CephMessageType,
+    pub ty: u16,
     /// The priority of this message. Higher value = more important.
     pub priority: u16,
     /// The version of message encoding.
@@ -51,7 +49,7 @@ pub struct CephMessageHeader2 {
 ceph_foundation::write_decode_encode!(
     CephMessageHeader2 = seq
         | transaction_id
-        | ty as u16
+        | ty
         | priority
         | version
         | data_pre_padding_len
@@ -81,7 +79,7 @@ impl Decode<'_> for CephMessageHeader2Flags {
 }
 
 impl Encode for CephMessageHeader2Flags {
-    fn encode(&self, buffer: &mut Vec<u8>) {
+    fn encode(&self, buffer: &mut impl Encoder) {
         buffer.push(self.0)
     }
 }
