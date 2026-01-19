@@ -6,6 +6,29 @@ use std::{
     ops::RangeInclusive,
 };
 
+pub fn decode_full_mut_slice(in_slice: &mut [u8]) -> Result<&mut [u8], DecodeError> {
+    let have = in_slice.len();
+    let (len, rest) = in_slice
+        .split_first_chunk_mut()
+        .ok_or(DecodeError::NotEnoughData {
+            field: None,
+            have,
+            need: 4,
+        })?;
+
+    let len = u32::from_le_bytes(*len);
+
+    if rest.len() != len as usize {
+        return Err(DecodeError::Custom(format!(
+            "Non-full slice encountered. Expected {} bytes, but had {} bytes left",
+            len,
+            rest.len()
+        )));
+    }
+
+    Ok(rest)
+}
+
 #[macro_export]
 macro_rules! write_decode_encode {
     (dec($struct:ident, $buffer:ident): { } with $($fields:ident)*) => {

@@ -15,7 +15,7 @@ use msgr2::{
 use ceph_client::connection::{ClientConnection, Config, Message, state::Established};
 
 use ceph_foundation::{
-    CephFeatureSet, Decode, Encode, Timestamp, WireString,
+    CephFeatureSet, Decode, Encode, Timestamp,
     crypto::Key,
     entity::{EntityAddress, EntityAddressType, EntityName, EntityType},
 };
