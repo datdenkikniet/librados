@@ -26,6 +26,7 @@ pub struct MonMap {
 impl DecodeMessage<'_> for MonMap {
     fn decode_message(data_segments: &[&'_ [u8]]) -> Result<Self, crate::DecodeMessageError> {
         let mut data_segment = data_segments[0];
+        let mut data_segment = <&[u8]>::decode(&mut data_segment)?;
         let (version, mut data) =
             ceph_foundation::get_versions_and_data!(MonMap: &mut data_segment, 9, 6);
 

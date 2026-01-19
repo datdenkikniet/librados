@@ -2,64 +2,49 @@ use ceph_foundation::DecodeError;
 
 use crate::{Frame, Tag};
 
+#[derive(Debug)]
 pub struct Message<'a> {
     header: &'a [u8],
-    front: Option<&'a [u8]>,
-    middle: Option<&'a [u8]>,
-    back: Option<&'a [u8]>,
+    len: usize,
+    inner: [&'a [u8]; 3],
 }
 
 impl<'a> Message<'a> {
-    pub fn new(header: &'a [u8], others: &[&'a [u8]]) -> Option<Self> {
+    pub fn new(header: &'a [u8], others: &[&'a [u8]]) -> Result<Self, DecodeError> {
         if others.len() > 3 {
-            return None;
+            return Err(DecodeError::Custom(format!(
+                "Expected at most 3 data segments, got {}",
+                others.len()
+            )));
         }
 
-        Some(Self {
+        let mut inner = [&[][..]; 3];
+        inner[..others.len()].copy_from_slice(others);
+
+        Ok(Self {
             header,
-            front: others.get(0).map(|v| *v),
-            middle: others.get(1).map(|v| *v),
-            back: others.get(2).map(|v| *v),
+            len: others.len(),
+            inner,
         })
     }
 
-    pub fn decode(frame: &'a Frame<'a>) -> Result<Self, DecodeError> {
-        let mut segments = frame.segments().iter().copied();
-        let Some(header) = segments.next() else {
-            return Err(DecodeError::Custom(
-                "Received message frame without header segment".to_string(),
-            ));
-        };
+    pub fn from_frame(frame: &'a Frame<'a>) -> Result<Self, DecodeError> {
+        let segments = frame.segments();
+        let (header, rest) = segments.split_first().ok_or_else(|| {
+            DecodeError::Custom("Received message frame without header segment".to_string())
+        })?;
 
-        Ok(Message {
-            header,
-            front: segments.next(),
-            middle: segments.next(),
-            back: segments.next(),
-        })
+        Self::new(header, rest)
     }
 
     pub fn to_frame(&self) -> Frame<'a> {
-        let segments = match (self.front, self.middle, self.back) {
-            (None, None, None) => &[self.header][..],
-            (Some(f), None, None) => &[self.header, f][..],
-            (Some(f), Some(m), None) => &[self.header, f, m][..],
-            (Some(f), Some(m), Some(b)) => &[self.header, f, m, b][..],
-            (f, m, b) => unreachable!("{}, {}, {}", f.is_some(), m.is_some(), b.is_some()),
-        };
-
-        Frame::new(Tag::Message, segments).unwrap()
+        Frame::new(Tag::Message, self.data_segments()).unwrap()
     }
 
     pub fn push_data_segment(&mut self, segment: &'a [u8]) -> bool {
-        if self.front.is_none() {
-            self.front = Some(segment);
-            true
-        } else if self.middle.is_none() {
-            self.middle = Some(segment);
-            true
-        } else if self.back.is_none() {
-            self.back = Some(segment);
+        if self.len < 3 {
+            self.inner[self.len] = segment;
+            self.len += 1;
             true
         } else {
             false
@@ -67,30 +52,31 @@ impl<'a> Message<'a> {
     }
 
     pub fn pop_data_segment(&mut self) -> Option<&'a [u8]> {
-        if let Some(b) = self.back.take() {
-            Some(b)
-        } else if let Some(m) = self.middle.take() {
-            Some(m)
-        } else if let Some(f) = self.front.take() {
-            Some(f)
+        if let Some(len) = self.len.checked_sub(1) {
+            self.len = len;
+            Some(&self.inner[self.len])
         } else {
             None
         }
     }
 
+    pub fn header(&self) -> &'a [u8] {
+        self.header
+    }
+
     pub fn front(&self) -> Option<&[u8]> {
-        self.front
+        self.inner.get(0).map(|v| *v)
     }
 
     pub fn middle(&self) -> Option<&[u8]> {
-        self.middle
+        self.inner.get(1).map(|v| *v)
     }
 
-    pub fn back(&self) -> Option<&[u8]> {
-        self.back
+    pub fn back(&self) -> Option<&'a [u8]> {
+        self.inner.get(2).map(|v| *v)
     }
 
-    pub fn data_segments(&self) -> impl Iterator<Item = &[u8]> {
-        [self.front, self.middle, self.back].into_iter().flatten()
+    pub fn data_segments(&self) -> &[&'a [u8]] {
+        &self.inner[..self.len]
     }
 }
