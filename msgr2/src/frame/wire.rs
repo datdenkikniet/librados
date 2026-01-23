@@ -251,8 +251,10 @@ impl TxFrame<'_> {
             FrameFormat::Rev1Secure => {
                 const LEN: usize = Preamble::SERIALIZED_SIZE + REV1_SECURE_INLINE_SIZE;
                 let mut preamble = [0u8; LEN];
-                let preamble_and_inline_data_len =
-                    Preamble::SERIALIZED_SIZE + self.preamble.segments()[0].len();
+                let preamble_and_inline_data_len = Preamble::SERIALIZED_SIZE
+                    + self.preamble.segments()[0]
+                        .len()
+                        .next_multiple_of(REV1_SECURE_PAD_SIZE.get());
 
                 let len = LEN
                     .min(preamble_and_inline_data_len)
@@ -290,6 +292,8 @@ impl TxFrame<'_> {
 
                     rest = new_rest;
                 }
+
+                assert!(rest.is_empty());
 
                 Ok(total)
             }
