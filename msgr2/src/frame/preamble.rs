@@ -168,36 +168,6 @@ impl Preamble {
         })
     }
 
-    pub fn write_epilogue(&self, crcs: &[u32], output: &mut Vec<u8>) {
-        match self.format {
-            FrameFormat::Rev0Crc => {
-                let epilogue = Epilogue {
-                    late_flags: 0,
-                    crcs,
-                };
-
-                epilogue.write(output);
-            }
-            FrameFormat::Rev1Crc => {
-                if self.need_epilogue_rev2_1() {
-                    let epilogue = Epilogue {
-                        late_flags: 0,
-                        crcs: &crcs[1..],
-                    };
-
-                    epilogue.write(output);
-                }
-            }
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                if self.need_epilogue_rev2_1() {
-                    output.push(0xEu8);
-                    output.extend_from_slice(&[0u8; 15]);
-                }
-            }
-        };
-    }
-
     pub fn data_and_epilogue_segments<'a>(
         &self,
     ) -> impl Iterator<Item = usize> + 'a + core::fmt::Debug {

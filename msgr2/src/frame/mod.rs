@@ -163,7 +163,7 @@ impl<'a> Frame<'a> {
             }
         }
 
-        preamble.write_epilogue(crcs.as_slice(), output);
+        Self::write_epilogue(&preamble, &crcs, output);
     }
 
     pub fn decode(preamble: &Preamble, data: &'a [u8]) -> Result<Self, DecodeError> {
@@ -228,6 +228,36 @@ impl<'a> Frame<'a> {
             valid_segments: preamble.segment_count,
             segments,
         })
+    }
+
+    fn write_epilogue(preamble: &Preamble, crcs: &[u32; 4], output: &mut Vec<u8>) {
+        match preamble.format {
+            FrameFormat::Rev0Crc => {
+                let epilogue = Epilogue {
+                    late_flags: 0,
+                    crcs,
+                };
+
+                epilogue.write(output);
+            }
+            FrameFormat::Rev1Crc => {
+                if preamble.need_epilogue_rev2_1() {
+                    let epilogue = Epilogue {
+                        late_flags: 0,
+                        crcs: &crcs[1..],
+                    };
+
+                    epilogue.write(output);
+                }
+            }
+            FrameFormat::Rev0Secure => todo!(),
+            FrameFormat::Rev1Secure => {
+                if preamble.need_epilogue_rev2_1() {
+                    output.push(0xEu8);
+                    output.extend_from_slice(&[0u8; 15]);
+                }
+            }
+        };
     }
 
     fn handle_epilogue(
