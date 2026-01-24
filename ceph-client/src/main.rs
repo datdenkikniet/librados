@@ -5,7 +5,7 @@ use std::{
 
 mod header;
 
-use ceph_messages::{CephMessage, DecodeMessage, MonMap};
+use ceph_messages::{CephMessage, DecodeMessage, MonMap, MonSubscribe, MonSubscribeItem};
 use msgr2::{
     Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
@@ -181,6 +181,8 @@ fn main() {
 
     println!("Keepalive RX: {rx_keepalive:?}");
 
+    let mut buffer = Vec::new();
+
     let message = CephMessage::MonGetMap;
 
     let header = CephMessageHeader2 {
@@ -188,6 +190,8 @@ fn main() {
         transaction_id: 0,
         ty: message.identifier(),
         priority: 0,
+        // TODO: this is important: header version will affect
+        // encode/decode logic of sent and received messages.
         version: 0,
         data_pre_padding_len: 0,
         data_off: 0,
@@ -204,17 +208,61 @@ fn main() {
     let frame = connection.send_raw(&frame);
     send(frame, &mut stream);
 
-    let mut buffer = Vec::new();
+    let next = recv_raw(&mut buffer, &mut connection, &mut stream);
+    let next = connection.finish_rx_raw(next).unwrap();
+    let mon_map = CephMessage::decode_message(4, &next.segments()[1..]).unwrap();
+
+    println!("Mon map: {mon_map:?}");
+
+    let mon_sub = MonSubscribe {
+        hostname: "desktop".to_string(),
+        what: [(
+            "osdmap".to_string(),
+            MonSubscribeItem { start: 0, flags: 0 },
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    let body = mon_sub.to_vec();
+
+    let message = CephMessage::MonSubscribe(mon_sub);
+
+    let header = CephMessageHeader2 {
+        seq: 2,
+        transaction_id: 0,
+        ty: message.identifier(),
+        priority: 0,
+        version: 2,
+        data_pre_padding_len: 0,
+        data_off: 0,
+        ack_seq: 0,
+        flags: CephMessageHeader2Flags(0),
+        compat_version: None,
+        reserved: 0,
+    };
+
+    let header = header.to_vec();
+
+    // TODO: frame::new_message()?
+    let frame = Frame::new(Tag::Message, &[&header, &body]).unwrap();
+    let frame = connection.send_raw(&frame);
+    send(frame, &mut stream);
+
+    println!("Waiting for config");
+
     let next = recv_raw(&mut buffer, &mut connection, &mut stream);
     let next = connection.finish_rx_raw(next).unwrap();
 
-    let mon_get_map_response = msgr2::frames::Message::from_frame(&next).unwrap();
+    let message_response = msgr2::frames::Message::from_frame(&next).unwrap();
 
-    let header = CephMessageHeader2::decode(&mut mon_get_map_response.header()).unwrap();
+    let header = CephMessageHeader2::decode(&mut message_response.header()).unwrap();
 
     println!("{header:?}");
 
-    let mon_map = MonMap::decode_message(mon_get_map_response.data_segments()).unwrap();
+    let message =
+        ceph_messages::CephMessage::decode_message(header.ty, message_response.data_segments())
+            .unwrap();
 
-    panic!("{mon_map:#?}")
+    panic!("{message:#?}")
 }
