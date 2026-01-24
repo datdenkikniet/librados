@@ -1,15 +1,20 @@
+mod config;
 mod message;
 mod mon_map;
+mod mon_sub;
 
 use ceph_foundation::DecodeError;
 
+pub use config::Config;
 pub use message::CephMessage;
 pub use mon_map::MonMap;
+pub use mon_sub::{MonSubscribe, MonSubscribeItem};
 
 #[derive(Debug, Clone)]
 pub enum DecodeMessageError {
     DecodeError(DecodeError),
     NotEnoughSegments { have: usize, need: usize },
+    TooManySegments { have: usize, want: usize },
     Custom(String),
 }
 
