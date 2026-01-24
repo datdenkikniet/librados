@@ -2,6 +2,7 @@ mod config;
 mod message;
 mod mon_map;
 mod mon_sub;
+mod osd_map;
 
 use ceph_foundation::DecodeError;
 
@@ -9,6 +10,22 @@ pub use config::Config;
 pub use message::CephMessage;
 pub use mon_map::MonMap;
 pub use mon_sub::{MonSubscribe, MonSubscribeItem};
+pub use osd_map::OsdMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Epoch(pub u32);
+
+impl ceph_foundation::Encode for Epoch {
+    fn encode(&self, buffer: &mut impl ceph_foundation::Encoder) {
+        self.0.encode(buffer);
+    }
+}
+
+impl ceph_foundation::Decode<'_> for Epoch {
+    fn decode(buffer: &mut &[u8]) -> Result<Self, DecodeError> {
+        Ok(Self(u32::decode(buffer)?))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum DecodeMessageError {

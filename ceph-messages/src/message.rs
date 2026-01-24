@@ -48,7 +48,7 @@ msg_type! {
     AuthReply = 18,
     MonGetVersion = 19,
     MonGetVersionReply = 20,
-    OsdMap = 41,
+    OsdMap(OsdMap) = 41,
     GetPoolStats = 58,
     GetPoolStatsReply = 59,
     Config(Config) = 62,
