@@ -5,7 +5,7 @@ use std::{
 
 mod header;
 
-use ceph_messages::{CephMessage, DecodeMessage, MonMap, MonSubscribe, MonSubscribeItem};
+use ceph_messages::{CephMessage, MonSubscribe, MonSubscribeItem};
 use msgr2::{
     Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
@@ -264,5 +264,5 @@ fn main() {
         ceph_messages::CephMessage::decode_message(header.ty, message_response.data_segments())
             .unwrap();
 
-    panic!("{message:#?}")
+    panic!("{message:?}")
 }
