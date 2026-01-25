@@ -219,6 +219,7 @@ name = "msgr2"
 version = "0.1.0"
 dependencies = [
  "ceph-foundation",
+ "cephx",
  "crc",
  "crc-catalog",
 ]

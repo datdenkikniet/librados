@@ -10,7 +10,7 @@ pub use config::Config;
 pub use message::CephMessage;
 pub use mon_map::MonMap;
 pub use mon_sub::{MonSubscribe, MonSubscribeItem};
-pub use osd_map::OsdMap;
+pub use osd_map::MessageOsdMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Epoch(pub u32);
