@@ -13,7 +13,6 @@ use crate::{frame::preamble::SegmentDetail, wire::TxFrame};
 
 use ceph_foundation::DecodeError;
 
-pub const REV1_SECURE_INLINE_SIZE: usize = 48;
 pub const REV1_SECURE_PAD_SIZE: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
 #[derive(Debug, Clone, Copy, PartialEq)]
