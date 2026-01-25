@@ -3,9 +3,56 @@ use std::io::Read;
 use ceph_foundation::crypto::AES_GCM_SIG_SIZE;
 
 use crate::frame::{
-    FrameFormat, Preamble, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE,
-    encryption::FrameEncryption,
+    Epilogue, FrameFormat, Preamble, REV1_SECURE_PAD_SIZE, encryption::FrameEncryption,
 };
+
+const REV1_SECURE_INLINE_SIZE: usize = 48;
+
+fn wire_segments<'a>(preamble: &Preamble) -> impl Iterator<Item = usize> + 'a + core::fmt::Debug {
+    let expected_data = match preamble.format {
+        FrameFormat::Rev0Crc => {
+            let total_data_len: usize = preamble.segments().iter().map(|v| v.len()).sum();
+            let data_and_epilogue = total_data_len + Epilogue::SERIALIZED_SIZE_V2_0_CRC;
+
+            [Some(data_and_epilogue), None]
+        }
+        FrameFormat::Rev1Crc => {
+            let total_data_len: usize = preamble.segments().iter().map(|v| v.len()).sum();
+
+            let epilogue_len = if preamble.need_epilogue_rev2_1() {
+                4 + Epilogue::SERIALIZED_SIZE_V2_1_CRC
+            } else {
+                4
+            };
+
+            let data_and_epilogue = total_data_len + epilogue_len;
+            [Some(data_and_epilogue), None]
+        }
+        FrameFormat::Rev0Secure => todo!(),
+        FrameFormat::Rev1Secure => {
+            let mut segments = preamble.segments().iter();
+            let seg1_len = segments.next().unwrap().len();
+
+            // If the first segment is larger than the inline size, we should expect
+            // a new block with the leftover data, with padding.
+            let seg1_block = seg1_len
+                .checked_sub(REV1_SECURE_INLINE_SIZE)
+                .map(|seg1_left| seg1_left.next_multiple_of(REV1_SECURE_PAD_SIZE.get()));
+
+            // If there are any follow-up segments, we should expect a single block, with:
+            // 1. Data for each segment, with padding.
+            // 2. An epilogue
+            let other_segs_block = segments
+                .map(|v| v.len().next_multiple_of(REV1_SECURE_PAD_SIZE.get()))
+                .fold(None, |v, next| Some(v.unwrap_or(0) + next))
+                .map(|v| v + Epilogue::SERIALIZED_SIZE_V2_1_SECURE);
+
+            [seg1_block, other_segs_block]
+        }
+    };
+
+    expected_data.into_iter().flatten()
+}
 
 fn start_bytes(format: FrameFormat) -> usize {
     match format {
@@ -185,7 +232,7 @@ impl<'buf> RxFrame<'buf, ReadPreamble<'_>> {
         mut self,
         mut read: impl std::io::Read,
     ) -> Result<RxFrame<'buf, Completed>, RxError> {
-        let additional_blocks = self.state.preamble.data_and_epilogue_segments();
+        let additional_blocks = wire_segments(&self.state.preamble);
 
         for block in additional_blocks {
             let new_data_start = self.frame_data.len();
@@ -273,7 +320,7 @@ impl TxFrame<'_> {
                 output.write_all(tag.as_slice())?;
 
                 let mut total = LEN + tag.len();
-                let rest_blocks = self.preamble.data_and_epilogue_segments();
+                let rest_blocks = wire_segments(&self.preamble);
 
                 for block in rest_blocks {
                     let (block, new_rest) = rest

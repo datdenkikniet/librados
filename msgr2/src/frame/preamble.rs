@@ -1,6 +1,6 @@
 use std::num::NonZeroU8;
 
-use crate::frame::{Epilogue, FrameFormat, REV1_SECURE_INLINE_SIZE, REV1_SECURE_PAD_SIZE};
+use crate::frame::FrameFormat;
 
 /// The algorithm parameters used for the CRC
 /// calculated by Ceph.
@@ -166,54 +166,6 @@ impl Preamble {
             flags,
             _reserved,
         })
-    }
-
-    pub fn data_and_epilogue_segments<'a>(
-        &self,
-    ) -> impl Iterator<Item = usize> + 'a + core::fmt::Debug {
-        let expected_data = match self.format {
-            FrameFormat::Rev0Crc => {
-                let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();
-                let data_and_epilogue = total_data_len + Epilogue::SERIALIZED_SIZE_V2_0_CRC;
-
-                [Some(data_and_epilogue), None]
-            }
-            FrameFormat::Rev1Crc => {
-                let total_data_len: usize = self.segments().iter().map(|v| v.len()).sum();
-
-                let epilogue_len = if self.need_epilogue_rev2_1() {
-                    4 + Epilogue::SERIALIZED_SIZE_V2_1_CRC
-                } else {
-                    4
-                };
-
-                let data_and_epilogue = total_data_len + epilogue_len;
-                [Some(data_and_epilogue), None]
-            }
-            FrameFormat::Rev0Secure => todo!(),
-            FrameFormat::Rev1Secure => {
-                let mut segments = self.segments().iter();
-                let seg1_len = segments.next().unwrap().len();
-
-                // If the first segment is larger than the inline size, we should expect
-                // a new block with the leftover data, with padding.
-                let seg1_block = seg1_len
-                    .checked_sub(REV1_SECURE_INLINE_SIZE)
-                    .map(|seg1_left| seg1_left.next_multiple_of(REV1_SECURE_PAD_SIZE.get()));
-
-                // If there are any follow-up segments, we should expect a single block, with:
-                // 1. Data for each segment, with padding.
-                // 2. An epilogue
-                let other_segs_block = segments
-                    .map(|v| v.len().next_multiple_of(REV1_SECURE_PAD_SIZE.get()))
-                    .fold(None, |v, next| Some(v.unwrap_or(0) + next))
-                    .map(|v| v + Epilogue::SERIALIZED_SIZE_V2_1_SECURE);
-
-                [seg1_block, other_segs_block]
-            }
-        };
-
-        expected_data.into_iter().flatten()
     }
 
     pub fn need_epilogue_rev2_1(&self) -> bool {
