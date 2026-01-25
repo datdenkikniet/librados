@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 
-use ceph_foundation::{Decode, Uuid};
+use ceph_foundation::{Decode, Timestamp, Uuid};
 
 use crate::{DecodeMessage, Epoch};
 
 #[derive(Debug, Clone)]
-pub struct OsdMap {
+pub struct MessageOsdMap {
     pub fsid: Uuid,
     pub incremental_maps: HashMap<Epoch, Vec<u8>>,
-    pub maps: HashMap<Epoch, Vec<u8>>,
+    pub maps: HashMap<Epoch, ByteArrayEncoded<OsdMap>>,
     pub cluster_osdmap_trim_lower_bound: Epoch,
     pub newest_map: Epoch,
 }
 
-impl DecodeMessage<'_> for OsdMap {
+impl DecodeMessage<'_> for MessageOsdMap {
     fn decode_message(segments: &[&'_ [u8]]) -> Result<Self, crate::DecodeMessageError> {
         if segments.len() > 1 {
             return Err(crate::DecodeMessageError::TooManySegments {
@@ -38,5 +38,84 @@ impl DecodeMessage<'_> for OsdMap {
             cluster_osdmap_trim_lower_bound,
             newest_map,
         })
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PoolId(i64);
+
+impl<'a> Decode<'a> for PoolId {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
+        Ok(Self(i64::decode(buffer)?))
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PoolMax(i32);
+
+impl<'a> Decode<'a> for PoolMax {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
+        Ok(Self(i32::decode(buffer)?))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OsdMap {
+    pub fsid: Uuid,
+    pub epoch: Epoch,
+    pub created: Timestamp,
+    pub modified: Timestamp,
+    pub pool_name: HashMap<PoolId, String>,
+    pub pool_max: PoolMax,
+}
+
+impl<'a> Decode<'a> for OsdMap {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
+        // ignore versions
+        let _versions = <[u8; 2]>::decode(buffer)?;
+        let buffer = &mut <&[u8]>::decode(buffer)?;
+        // ignore versions, yy again
+        let _versions = <[u8; 2]>::decode(buffer)?;
+        let buffer = &mut <&[u8]>::decode(buffer)?;
+        let fsid = Uuid::decode(buffer)?;
+        let epoch = Epoch::decode(buffer)?;
+        let created = Timestamp::decode(buffer)?;
+        let modified = Timestamp::decode(buffer)?;
+        let _pools = HashMap::<PoolId, SkipWithLength>::decode(buffer)?;
+        let pool_name = HashMap::<PoolId, String>::decode(buffer)?;
+        let pool_max = PoolMax::decode(buffer)?;
+
+        Ok(Self {
+            fsid,
+            epoch,
+            created,
+            modified,
+            pool_name,
+            pool_max,
+        })
+    }
+}
+
+/// Wrapper meant for types that ceph library can express as an array of bytes
+///
+/// ceph/src/messages/MOSDMap.h:34 is an example
+#[derive(Debug, Clone)]
+pub struct ByteArrayEncoded<T>(T);
+
+impl<'a, T: Decode<'a>> Decode<'a> for ByteArrayEncoded<T> {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
+        // consume length
+        let buffer = &mut <&[u8]>::decode(buffer)?;
+        Ok(Self(T::decode(buffer)?))
+    }
+}
+
+pub struct SkipWithLength<'a>(&'a [u8]);
+
+impl<'a> Decode<'a> for SkipWithLength<'a> {
+    fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
+        // ignore versions
+        <[u8; 2]>::decode(buffer)?;
+        Ok(Self(<&[u8]>::decode(buffer)?))
     }
 }
