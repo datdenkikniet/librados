@@ -69,7 +69,9 @@ impl<'a, E> LenWriter<'a, E>
 where
     E: Encoder,
 {
-    pub fn new(encoder: &'a mut E, len_at: usize) -> Self {
+    pub fn new(encoder: &'a mut E) -> Self {
+        let len_at = encoder.len();
+        0u32.encode(encoder);
         Self { encoder, len_at }
     }
 }
@@ -117,8 +119,6 @@ where
 macro_rules! write_versions_and_data {
     ($buffer:expr, $version:expr, $compat:expr) => {{
         $buffer.extend_from_slice(&[$version, $compat]);
-        let len_at = $buffer.len();
-        $buffer.extend_from_slice(&0u32.to_le_bytes());
-        $crate::LenWriter::new($buffer, len_at)
+        $crate::LenWriter::new($buffer)
     }};
 }
