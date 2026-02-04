@@ -38,8 +38,8 @@ impl Decode<'_> for MonInfo {
     fn decode(buffer: &mut &'_ [u8]) -> Result<Self, DecodeError> {
         let (version, mut buffer) =
             crate::get_versions_and_data!(MonInfo: buffer, Self::VERSION, 3);
-
         let buffer = &mut buffer;
+
         let name = WireString::decode(buffer)?.into();
         let public_addrs = AddrVec::decode(buffer)?.try_into()?;
 

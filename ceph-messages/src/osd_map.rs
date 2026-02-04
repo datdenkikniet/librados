@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ceph_foundation::{Decode, Timestamp, Uuid};
+use ceph_foundation::{Decode, Timestamp, Uuid, entity::AddrVec, get_versions_and_data, pg::Pg};
 
 use crate::{DecodeMessage, Epoch};
 
@@ -71,28 +71,46 @@ pub struct OsdMap {
 
 impl<'a> Decode<'a> for OsdMap {
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
-        // ignore versions
-        let _versions = <[u8; 2]>::decode(buffer)?;
-        let buffer = &mut <&[u8]>::decode(buffer)?;
-        // ignore versions, yy again
-        let _versions = <[u8; 2]>::decode(buffer)?;
-        let buffer = &mut <&[u8]>::decode(buffer)?;
-        let fsid = Uuid::decode(buffer)?;
-        let epoch = Epoch::decode(buffer)?;
-        let created = Timestamp::decode(buffer)?;
-        let modified = Timestamp::decode(buffer)?;
-        let _pools = HashMap::<PoolId, SkipWithLength>::decode(buffer)?;
-        let pool_name = HashMap::<PoolId, String>::decode(buffer)?;
-        let pool_max = PoolMax::decode(buffer)?;
+        let (_version, mut buffer) = get_versions_and_data!(OsdMap: buffer, 7);
+        let buffer = &mut buffer;
 
-        Ok(Self {
-            fsid,
-            epoch,
-            created,
-            modified,
-            pool_name,
-            pool_max,
-        })
+        // Client-usable data
+        let osd_map = {
+            let (_inner_version, mut buffer) = get_versions_and_data!(OsdMap: buffer, 9, 6);
+            let buffer = &mut buffer;
+            let fsid = Uuid::decode(buffer)?;
+            let epoch = Epoch::decode(buffer)?;
+            let created = Timestamp::decode(buffer)?;
+            let modified = Timestamp::decode(buffer)?;
+            let _pools = HashMap::<PoolId, SkipWithLength>::decode(buffer)?;
+            let pool_name = HashMap::<PoolId, String>::decode(buffer)?;
+            let pool_max = PoolMax::decode(buffer)?;
+            let flags = u32::decode(buffer)?;
+            let max_osd = i32::decode(buffer)?;
+
+            // Only starting at version 5, but min we support is 6
+            let osd_state: Vec<u32> = Vec::decode(buffer)?;
+            let osd_weight: Vec<u32> = Vec::decode(buffer)?;
+            let client_addrs: Vec<AddrVec> = Vec::decode(buffer)?;
+
+            let pg_temp_map: HashMap<Pg, u32> = HashMap::decode(buffer)?;
+
+            Self {
+                fsid,
+                epoch,
+                created,
+                modified,
+                pool_name,
+                pool_max,
+            }
+        };
+
+        {
+            // OSD-only data
+            let (_version, _buffer) = get_versions_and_data!(OsdMap: buffer, u8::MAX);
+        }
+
+        Ok(osd_map)
     }
 }
 
@@ -110,12 +128,13 @@ impl<'a, T: Decode<'a>> Decode<'a> for ByteArrayEncoded<T> {
     }
 }
 
-pub struct SkipWithLength<'a>(&'a [u8]);
+pub struct SkipWithLength;
 
-impl<'a> Decode<'a> for SkipWithLength<'a> {
+impl<'a> Decode<'a> for SkipWithLength {
     fn decode(buffer: &mut &'a [u8]) -> Result<Self, ceph_foundation::DecodeError> {
         // ignore versions
         <[u8; 2]>::decode(buffer)?;
-        Ok(Self(<&[u8]>::decode(buffer)?))
+        <&[u8]>::decode(buffer)?;
+        Ok(Self)
     }
 }

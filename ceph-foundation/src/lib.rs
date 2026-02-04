@@ -3,6 +3,7 @@ mod encdec;
 pub mod entity;
 mod features;
 mod mon_info;
+pub mod pg;
 mod uuid;
 
 pub use encdec::{Decode, DecodeError, Encode, Encoder, WireString, decode_full_mut_slice};
@@ -37,7 +38,7 @@ macro_rules! get_versions_and_data {
         let [version, compat]: [u8; 2] = $crate::Decode::decode($buffer)?;
 
         if compat > $version {
-            return Err(DecodeError::Custom(format!(
+            return Err($crate::DecodeError::Custom(format!(
                 "Incompatible {} struct: we are at {}, received version is {} which claims compatilibity down to {}",
                 stringify!($ty), $version, version, compat
             )).into());
@@ -45,7 +46,7 @@ macro_rules! get_versions_and_data {
 
         $(
             if $version < $min_nautilus {
-                return Err(DecodeError::Custom(
+                return Err($crate::DecodeError::Custom(
                     format!("Incompatible {} struct: received version {} is pre-NAUTILUS library does not support (minimum supported version: {}).", stringify!(ty), version, $min_nautilus),
                 ).into());
             }
