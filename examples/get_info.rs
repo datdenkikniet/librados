@@ -31,26 +31,41 @@ async fn main() {
         );
     }
 
-    let blocking_omap = ctx
-        .get_omap_vals_blocking(&object)
-        .unwrap()
-        .map(|v| v.unwrap());
+    let mut after: Option<Vec<u8>> = None;
+    let mut len = 0;
 
-    let async_omap = ctx
-        .get_omap_vals(&object)
-        .await
-        .unwrap()
-        .map(|v| v.unwrap());
+    loop {
+        let after_mapped = after.as_ref().map(|v| core::str::from_utf8(v).unwrap());
 
-    for ((k1, v1), (k2, v2)) in blocking_omap.zip(async_omap) {
-        let k1 = std::str::from_utf8(&k1).unwrap();
-        let k2 = std::str::from_utf8(&k2).unwrap();
+        let blocking_omap = ctx.get_omap_vals_blocking(&object, after_mapped).unwrap();
+        let more = blocking_omap.more();
 
-        // This works, because `OmapKeyValues` yields an ordered list.
-        assert_eq!(k1, k2);
-        assert_eq!(v1, v2);
+        let blocking_omap = blocking_omap.map(|v| v.unwrap());
 
-        println!("Found omap `{k1}` of {} bytes.", v1.len());
+        let async_omap = ctx
+            .get_omap_vals(&object, after_mapped)
+            .await
+            .unwrap()
+            .map(|v| v.unwrap());
+
+        for ((k1_bytes, v1), (k2, v2)) in blocking_omap.zip(async_omap) {
+            let k1 = std::str::from_utf8(&k1_bytes).unwrap();
+            let k2 = std::str::from_utf8(&k2).unwrap();
+
+            // This works, because `OmapKeyValues` yields an ordered list.
+            assert_eq!(k1, k2);
+            assert_eq!(v1, v2);
+
+            println!("Found omap `{k1}` of {} bytes.", v1.len());
+
+            after = Some(k1_bytes);
+            len += 1;
+        }
+
+        if !more {
+            println!("Len: {len}");
+            break;
+        }
     }
 
     println!("Getting objects using list");

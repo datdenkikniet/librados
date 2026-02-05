@@ -1,4 +1,4 @@
-use std::{ffi::CStr, pin::Pin};
+use std::{ffi::CString, pin::Pin};
 
 use crate::{
     IoCtx, Result,
@@ -15,13 +15,14 @@ use super::read_op::{ReadOp, ReadOpExecutor};
 #[derive(Debug)]
 pub struct OmapKeyValues {
     inner: rados_omap_iter_t,
+    more: bool,
 }
 
 impl OmapKeyValues {
     /// # Safety
     /// `inner` must be a valid and initialized `rados_omap_iter_t`.
-    unsafe fn new(inner: rados_omap_iter_t) -> Self {
-        Self { inner }
+    unsafe fn new(inner: rados_omap_iter_t, more: bool) -> Self {
+        Self { inner, more }
     }
 
     /// Try to get the next key/value pair.
@@ -58,6 +59,11 @@ impl OmapKeyValues {
             Ok(Some((key, val)))
         }
     }
+
+    /// Whether more key-value pairs are available.
+    pub fn more(&self) -> bool {
+        self.more
+    }
 }
 
 impl Iterator for OmapKeyValues {
@@ -78,9 +84,13 @@ impl Drop for OmapKeyValues {
 
 impl<'rados> IoCtx<'rados> {
     /// Blockingly get the omap key value pairs for `object`.
-    pub fn get_omap_vals_blocking(&self, object: &str) -> Result<OmapKeyValues> {
+    pub fn get_omap_vals_blocking(
+        &self,
+        object: &str,
+        after: Option<&str>,
+    ) -> Result<OmapKeyValues> {
         let operation = OmapGetVals {
-            start_after: None,
+            start_after: after.map(|v| CString::new(v).expect("`after` contained interior null`")),
             filter_prefix: None,
             max_return: None,
         };
@@ -91,9 +101,9 @@ impl<'rados> IoCtx<'rados> {
     }
 
     /// Get the omap key value pairs for `object`.
-    pub async fn get_omap_vals(&self, object: &str) -> Result<OmapKeyValues> {
+    pub async fn get_omap_vals(&self, object: &str, after: Option<&str>) -> Result<OmapKeyValues> {
         let operation = OmapGetVals {
-            start_after: None,
+            start_after: after.map(|v| CString::new(v).expect("`after` contained interior null`")),
             filter_prefix: None,
             max_return: None,
         };
@@ -111,13 +121,13 @@ pub struct State {
     status: i32,
 }
 
-pub struct OmapGetVals<'a> {
-    start_after: Option<&'a CStr>,
-    filter_prefix: Option<&'a CStr>,
+pub struct OmapGetVals {
+    start_after: Option<CString>,
+    filter_prefix: Option<CString>,
     max_return: Option<u64>,
 }
 
-impl<'a> ReadOp for OmapGetVals<'a> {
+impl ReadOp for OmapGetVals {
     type OperationState = State;
 
     type Output = OmapKeyValues;
@@ -132,8 +142,14 @@ impl<'a> ReadOp for OmapGetVals<'a> {
         unsafe {
             rados_read_op_omap_get_vals2(
                 read_op,
-                self.start_after.map(|v| v.as_ptr()).unwrap_or(null()),
-                self.filter_prefix.map(|v| v.as_ptr()).unwrap_or(null()),
+                self.start_after
+                    .as_ref()
+                    .map(|v| v.as_ptr())
+                    .unwrap_or(null()),
+                self.filter_prefix
+                    .as_ref()
+                    .map(|v| v.as_ptr())
+                    .unwrap_or(null()),
                 self.max_return.unwrap_or(u64::MAX),
                 &raw mut state.iter,
                 &raw mut state.more as _,
@@ -149,7 +165,7 @@ impl<'a> ReadOp for OmapGetVals<'a> {
 
         assert!(!state.iter.is_null());
 
-        let res = unsafe { OmapKeyValues::new(state.iter) };
+        let res = unsafe { OmapKeyValues::new(state.iter, state.more) };
         Ok(res)
     }
 }
