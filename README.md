@@ -1,4 +1,6 @@
-A pure-rust implementation of protocols & messages used for communication in Ceph clusters.
+# `ceph-rs`
+
+A pure Rust implementation of protocols & messages used for communication in Ceph clusters.
 
 This crate aims to support versions NAUTILUS and up. Support for older versions and protocols (i.e. legacy adresses, msgr1) is not planned.
 
@@ -15,6 +17,8 @@ This project contains the following crates:
 [`msgr2`]: https://docs.ceph.com/en/quincy/dev/msgr2/
 [1]: https://docs.ceph.com/en/quincy/dev/msgr2/#message-exchange
 
+## Trying it out
+To try out the crate, you can run the `ceph-client` binary using `cargo run -p ceph-client -- -k [base64 key] [host]`
 
 # License
 

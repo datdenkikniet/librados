@@ -5,7 +5,9 @@ use std::{
 
 mod header;
 
+use base64::Engine;
 use ceph_messages::{CephMessage, MonSubscribe, MonSubscribeItem};
+use clap::Parser;
 use msgr2::{
     Frame, Tag,
     frames::{AuthMethodCephX, AuthRequest, Banner, ClientIdent, ConMode, Hello, Keepalive},
@@ -21,6 +23,22 @@ use ceph_foundation::{
 };
 
 use crate::header::{CephMessageHeader2, CephMessageHeader2Flags};
+
+#[derive(Parser)]
+struct Command {
+    /// The address of the monitor to connect to, including port.
+    ///
+    /// Example: 10.0.1.222:3300
+    pub remote: String,
+    /// The base64 encoded key to use for authentication
+    ///
+    /// You find this value in your `ceph.keyring`
+    #[clap(long, short)]
+    pub key: String,
+    /// The username to use
+    #[clap(long, short, default_value = "admin")]
+    pub username: String,
+}
 
 fn send(frame: TxFrame<'_>, w: &mut impl std::io::Write) {
     println!("Sending: {frame:?}");
@@ -51,8 +69,14 @@ where
 }
 
 fn main() {
-    let master_key = Key::decode(&mut include_bytes!("./key.bin").as_slice()).unwrap();
-    let mut stream = TcpStream::connect("10.0.1.222:3300").unwrap();
+    let command = Command::parse();
+
+    let key_data = base64::engine::general_purpose::STANDARD
+        .decode(command.key)
+        .unwrap();
+
+    let master_key = Key::decode(&mut key_data.as_slice()).unwrap();
+    let mut stream = TcpStream::connect(command.remote).unwrap();
 
     let mut config = Config::new(true);
     config.request_ticket_for(EntityType::Osd);
@@ -94,7 +118,7 @@ fn main() {
 
     let name = EntityName {
         ty: EntityType::Client,
-        name: "admin".into(),
+        name: command.username,
     };
 
     // let method = AuthMethodNone {
@@ -264,5 +288,5 @@ fn main() {
         ceph_messages::CephMessage::decode_message(header.ty, message_response.data_segments())
             .unwrap();
 
-    panic!("{message:?}")
+    println!("{message:?}")
 }
