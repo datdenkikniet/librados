@@ -14,3 +14,13 @@ This project contains the following crates:
 
 [`msgr2`]: https://docs.ceph.com/en/quincy/dev/msgr2/
 [1]: https://docs.ceph.com/en/quincy/dev/msgr2/#message-exchange
+
+
+# License
+
+All source code (including code snippets) is licensed under either of
+
+* Apache License, Version 2.0 (LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0)
+* MIT license (LICENSE-MIT or https://opensource.org/licenses/MIT)
+
+at your option.
